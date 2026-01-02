@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+
+{% block title %}Departmental Data - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<style>
+    .dept-table { font-size: 14px; }
+    .dept-table th { white-space: nowrap; text-align: center; }
+    .dept-table td { text-align: center; }
+    .dept-table td:first-child { text-align: left; }
+    .dept-table input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+    .dept-table input[type="number"] { width: 60px; text-align: center; }
+    .section-header { background: #34495e; color: white; }
+    .points-cell { font-weight: bold; color: #27ae60; }
+    .note { font-size: 11px; color: #666; display: block; }
+</style>
+
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}">Import Survey</a>
+    <a href="{% url 'departmental_data' %}" class="active">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h1>Departmental Data Entry</h1>
+
+<div class="actions">
+    <form method="get" style="display: inline;">
+        <label>Academic Year:</label>
+        <select name="year" onchange="window.location.href='{% url 'departmental_data_year' '00-00' %}'.replace('00-00', this.value)">
+            {% for year in years %}
+            <option value="{{ year.year_code }}" {% if year.year_code == academic_year.year_code %}selected{% endif %}>
+                AY {{ year.year_code }}{% if year.is_current %} (Current){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<p style="margin: 15px 0;">
+    <strong>Point Values:</strong>
+    New Innovations: {{ point_values.new_innovations|default:2000 }} |
+    MyTIP Winner: {{ point_values.mytip_winner|default:250 }} |
+    MyTIP Count: {{ point_values.mytip_per|default:25 }}/ea (max 20) |
+    Top 25%: {{ point_values.teaching_top_25|default:2500 }} |
+    65-25%: {{ point_values.teaching_65_25|default:1000 }} |
+    Teacher of Year: {{ point_values.teacher_of_year|default:7500 }} |
+    Hon. Mention: {{ point_values.honorable_mention|default:5000 }}
+</p>
+
+<table class="dept-table">
+    <thead>
+        <tr class="section-header">
+            <th rowspan="2" style="text-align: left;">Faculty</th>
+            <th colspan="3">Evaluations</th>
+            <th colspan="4">Teaching Awards</th>
+            <th rowspan="2">Dept Total</th>
+        </tr>
+        <tr>
+            <th>New Innov<span class="note">(80%+)</span></th>
+            <th>MyTIP Win</th>
+            <th>MyTIP #<span class="note">(max 20)</span></th>
+            <th>Top 25%</th>
+            <th>65-25%</th>
+            <th>ToY</th>
+            <th>Hon Men</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for d in dept_data %}
+        <tr data-email="{{ d.faculty.email }}">
+            <td style="text-align: left;">
+                <a href="{% url 'faculty_detail' d.faculty.email %}">{{ d.faculty.display_name }}</a>
+                {% if d.faculty.is_ccc_member %}<span class="badge badge-info" style="margin-left: 5px;">CCC</span>{% endif %}
+            </td>
+            <td>
+                <input type="checkbox" class="dept-checkbox" data-field="new_innovations"
+                       {% if d.new_innovations %}checked{% endif %}>
+            </td>
+            <td>
+                <input type="checkbox" class="dept-checkbox" data-field="mytip_winner"
+                       {% if d.mytip_winner %}checked{% endif %}>
+            </td>
+            <td>
+                <input type="number" class="dept-number" data-field="mytip_count"
+                       value="{{ d.mytip_count }}" min="0" max="20">
+            </td>
+            <td>
+                <input type="checkbox" class="dept-checkbox" data-field="teaching_top_25"
+                       {% if d.teaching_top_25 %}checked{% endif %}>
+            </td>
+            <td>
+                <input type="checkbox" class="dept-checkbox" data-field="teaching_65_25"
+                       {% if d.teaching_65_25 %}checked{% endif %}>
+            </td>
+            <td>
+                <input type="checkbox" class="dept-checkbox" data-field="teacher_of_year"
+                       {% if d.teacher_of_year %}checked{% endif %}>
+            </td>
+            <td>
+                <input type="checkbox" class="dept-checkbox" data-field="honorable_mention"
+                       {% if d.honorable_mention %}checked{% endif %}>
+            </td>
+            <td class="points-cell" data-points-cell>{{ d.departmental_total_points }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="9" style="text-align: center; color: #666;">
+                No faculty data. <a href="{% url 'import_survey' %}">Import survey data</a> first.
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top: 20px;">
+    <a href="{% url 'reports_dashboard' %}" class="btn btn-success">Continue to Reports</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const yearCode = '{{ academic_year.year_code }}';
+const csrfToken = '{{ csrf_token }}';
+
+function updateField(email, field, value) {
+    fetch('{% url "departmental_update" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({
+            email: email,
+            year_code: yearCode,
+            field: field,
+            value: value,
+        }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the points cell
+            const row = document.querySelector(`tr[data-email="${email}"]`);
+            const pointsCell = row.querySelector('[data-points-cell]');
+            if (pointsCell) {
+                pointsCell.textContent = data.departmental_total_points;
+            }
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(err => {
+        console.error('Error:', err);
+    });
+}
+
+// Checkbox handlers
+document.querySelectorAll('.dept-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const row = this.closest('tr');
+        const email = row.dataset.email;
+        const field = this.dataset.field;
+        updateField(email, field, this.checked);
+    });
+});
+
+// Number input handlers
+document.querySelectorAll('.dept-number').forEach(input => {
+    input.addEventListener('change', function() {
+        const row = this.closest('tr');
+        const email = row.dataset.email;
+        const field = this.dataset.field;
+        let value = parseInt(this.value) || 0;
+        if (value > 20) value = 20;
+        if (value < 0) value = 0;
+        this.value = value;
+        updateField(email, field, value);
+    });
+});
+</script>
+{% endblock %}

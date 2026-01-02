@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Review Import - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}" class="active">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h1>Review Import</h1>
+
+<div class="summary-stats">
+    <div class="stat">
+        <div class="stat-value">{{ total_count }}</div>
+        <div class="stat-label">Total Faculty</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ matched|length }}</div>
+        <div class="stat-label">Matched to Roster</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ unmatched|length }}</div>
+        <div class="stat-label">Not in Roster</div>
+    </div>
+</div>
+
+<p><strong>File:</strong> {{ filename }} | <strong>Academic Year:</strong> AY {{ year_code }}</p>
+
+{% if unmatched %}
+<div class="card" style="border-color: #ffc107;">
+    <h3 style="color: #856404;">Unmatched Faculty ({{ unmatched|length }})</h3>
+    <p>These faculty are not in the roster and will NOT be imported. Add them to the roster first if needed.</p>
+    <table>
+        <thead>
+            <tr><th>Name</th><th>Email</th><th>Points</th></tr>
+        </thead>
+        <tbody>
+            {% for f in unmatched %}
+            <tr style="background: #fff3cd;">
+                <td>{{ f.display_name }}</td>
+                <td>{{ f.email }}</td>
+                <td>{{ f.total_points }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Matched Faculty ({{ matched|length }})</h3>
+    <p>These faculty will be imported.</p>
+    <table>
+        <thead>
+            <tr><th>Name</th><th>Email</th><th>Points</th><th>Quarters</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+            {% for f in matched %}
+            <tr>
+                <td>{{ f.display_name }}</td>
+                <td>{{ f.email }}</td>
+                <td>{{ f.total_points }}</td>
+                <td>{{ f.quarters|join:", " }}</td>
+                <td>
+                    {% if f.has_incomplete %}
+                    <span class="badge badge-warning">Incomplete</span>
+                    {% else %}
+                    <span class="badge badge-success">Complete</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" style="text-align: center;">No matched faculty</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="actions">
+    <form method="post" action="{% url 'import_confirm' %}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success" {% if not matched %}disabled{% endif %}>
+            Confirm Import ({{ matched|length }} faculty)
+        </button>
+    </form>
+    <a href="{% url 'import_survey' %}" class="btn btn-secondary">Cancel</a>
+</div>
+{% endblock %}

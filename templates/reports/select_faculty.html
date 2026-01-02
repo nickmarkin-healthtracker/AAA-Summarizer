@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}Select Faculty - Reports{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}" class="active">Reports</a>
+</div>
+
+<h1>Select Faculty for Export</h1>
+<p>Academic Year: <strong>AY {{ academic_year.year_code }}</strong></p>
+
+<form method="post" action="{% url 'db_export_faculty' %}">
+    {% csrf_token %}
+    <input type="hidden" name="year_code" value="{{ academic_year.year_code }}">
+
+    <div class="actions">
+        <button type="button" onclick="selectAll(true)" class="btn btn-secondary">Select All</button>
+        <button type="button" onclick="selectAll(false)" class="btn btn-secondary">Deselect All</button>
+
+        <span style="margin-left: 20px;">Format:</span>
+        <select name="format" style="margin-left: 5px;">
+            <option value="pdf">PDF</option>
+            <option value="md">Markdown</option>
+        </select>
+
+        <label style="margin-left: 20px;">
+            <input type="checkbox" name="combined">
+            Combine into single document
+        </label>
+
+        <button type="submit" class="btn btn-success" style="margin-left: 20px;">Export Selected</button>
+    </div>
+
+    <div class="checkbox-list">
+        {% for f in faculty_list %}
+        <div class="checkbox-item">
+            <input type="checkbox" name="faculty" value="{{ f.email }}" id="fac_{{ forloop.counter }}">
+            <label for="fac_{{ forloop.counter }}">
+                {{ f.display_name }}
+                {% if f.has_incomplete %}<span class="status incomplete">INCOMPLETE</span>{% endif %}
+            </label>
+            <span class="points">
+                {{ f.survey_points }} survey +
+                {{ f.dept_points }} dept +
+                {{ f.ccc_points }} CCC =
+                <strong>{{ f.total_points }}</strong>
+            </span>
+        </div>
+        {% empty %}
+        <p style="text-align: center; color: #666; padding: 20px;">
+            No faculty data found. <a href="{% url 'import_survey' %}">Import survey data</a> first.
+        </p>
+        {% endfor %}
+    </div>
+</form>
+
+<script>
+function selectAll(checked) {
+    document.querySelectorAll('input[name="faculty"]').forEach(cb => cb.checked = checked);
+}
+</script>
+{% endblock %}

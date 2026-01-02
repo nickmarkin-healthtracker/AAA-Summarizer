@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}Import History - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}" class="active">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h1>Import History</h1>
+
+<a href="{% url 'import_survey' %}" class="btn" style="margin-bottom: 20px;">New Import</a>
+
+<table>
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Filename</th>
+            <th>Academic Year</th>
+            <th>Faculty</th>
+            <th>Unmatched</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for imp in imports %}
+        <tr>
+            <td>{{ imp.imported_at|date:"M d, Y H:i" }}</td>
+            <td>{{ imp.filename }}</td>
+            <td>AY {{ imp.academic_year.year_code }}</td>
+            <td>{{ imp.faculty_count }}</td>
+            <td>
+                {% if imp.unmatched_emails %}
+                <span class="badge badge-warning">{{ imp.unmatched_emails|length }}</span>
+                {% else %}
+                -
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align: center; color: #666;">No imports yet</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

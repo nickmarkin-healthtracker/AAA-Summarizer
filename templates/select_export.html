@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Select Export - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">← Upload New File</a>
+</div>
+
+<h1>Select Export Type</h1>
+<p class="subtitle">Choose what you'd like to export</p>
+
+{% if summary %}
+<div class="summary-stats">
+    <div class="stat">
+        <div class="stat-value">{{ summary.total_faculty }}</div>
+        <div class="stat-label">Faculty Members</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ summary.complete_submissions }}</div>
+        <div class="stat-label">Complete</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ summary.incomplete_submissions }}</div>
+        <div class="stat-label">Incomplete</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">{{ summary.grand_totals.total|default:0 }}</div>
+        <div class="stat-label">Total Points</div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <h3>Points Summary (CSV)</h3>
+    <p>Export a CSV file with all faculty members and their point totals, sorted alphabetically by surname. Great for spreadsheets and data analysis.</p>
+    <a href="{% url 'export_points' %}" class="btn">Download Points CSV</a>
+</div>
+
+<div class="card">
+    <h3>Individual Faculty Summaries</h3>
+    <p>Generate detailed summary reports for specific faculty members. Includes all activities, point breakdowns, and completion status.</p>
+    <a href="{% url 'select_faculty' %}" class="btn">Select Faculty</a>
+</div>
+
+<div class="card">
+    <h3>Activity Type Reports</h3>
+    <p>Generate reports grouped by activity type (e.g., all invited lectures, all committee memberships). Useful for department-wide analysis.</p>
+    <a href="{% url 'select_activities' %}" class="btn">Select Activities</a>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Survey Data - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}" class="active">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h1>Import Survey Data</h1>
+
+<div class="card">
+    <h3>Upload REDCap Export</h3>
+    <p>Upload a REDCap CSV export. Data will be matched to the faculty roster.</p>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label>Academic Year</label>
+            <select name="year_code">
+                {% for year in years %}
+                <option value="{{ year.year_code }}" {% if year.year_code == current_year.year_code %}selected{% endif %}>
+                    AY {{ year.year_code }}{% if year.is_current %} (Current){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>CSV File</label>
+            <input type="file" name="csv_file" accept=".csv" required>
+        </div>
+
+        <button type="submit" class="btn">Upload & Review</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>What Happens Next</h3>
+    <ol style="margin-left: 20px;">
+        <li>CSV is parsed to extract faculty submissions</li>
+        <li>Emails are matched against the faculty roster</li>
+        <li>Review page shows matched and unmatched faculty</li>
+        <li>Confirm to save data to database</li>
+        <li>Enter departmental data (teaching awards, evaluations)</li>
+    </ol>
+</div>
+
+<p><a href="{% url 'import_history' %}">View Import History</a></p>
+{% endblock %}

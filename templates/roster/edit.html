@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit {{ faculty.display_name }} - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h1>Edit Faculty Member</h1>
+
+<div class="card">
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label>Email (cannot be changed)</label>
+            <input type="email" value="{{ faculty.email }}" disabled>
+        </div>
+
+        <div class="form-group">
+            <label>First Name</label>
+            <input type="text" name="first_name" value="{{ faculty.first_name }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Last Name</label>
+            <input type="text" name="last_name" value="{{ faculty.last_name }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Rank</label>
+            <select name="rank">
+                <option value="">-- Select --</option>
+                {% for value, label in rank_choices %}
+                <option value="{{ value }}" {% if faculty.rank == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Contract Type</label>
+            <select name="contract_type">
+                <option value="">-- Select --</option>
+                {% for value, label in contract_choices %}
+                <option value="{{ value }}" {% if faculty.contract_type == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Division</label>
+            <input type="text" name="division" value="{{ faculty.division }}">
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_active" {% if faculty.is_active %}checked{% endif %}>
+                Active
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_ccc_member" {% if faculty.is_ccc_member %}checked{% endif %}>
+                CCC Member (1,000 points - persists year-to-year)
+            </label>
+        </div>
+
+        <button type="submit" class="btn">Save Changes</button>
+        <a href="{% url 'faculty_detail' faculty.email %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

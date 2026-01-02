@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ faculty.display_name }} - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h1>{{ faculty.display_name }}</h1>
+
+<div class="card">
+    <h3>Faculty Information</h3>
+    <table>
+        <tr><th style="width: 150px;">Email</th><td>{{ faculty.email }}</td></tr>
+        <tr><th>Rank</th><td>{{ faculty.get_rank_display|default:"-" }}</td></tr>
+        <tr><th>Contract Type</th><td>{{ faculty.get_contract_type_display|default:"-" }}</td></tr>
+        <tr><th>Division</th><td>{{ faculty.division|default:"-" }}</td></tr>
+        <tr><th>Status</th><td>{% if faculty.is_active %}<span class="badge badge-success">Active</span>{% else %}<span class="badge badge-danger">Inactive</span>{% endif %}</td></tr>
+        <tr><th>CCC Member</th><td>{% if faculty.is_ccc_member %}<span class="badge badge-info">Yes (1,000 pts)</span>{% else %}No{% endif %}</td></tr>
+    </table>
+
+    <a href="{% url 'faculty_edit' faculty.email %}" class="btn">Edit</a>
+    <a href="{% url 'roster' %}" class="btn btn-secondary">Back to Roster</a>
+</div>
+
+{% if survey_data %}
+<div class="card">
+    <h3>Survey Data - AY {{ current_year.year_code }}</h3>
+    <table>
+        <tr><th>Quarters Reported</th><td>{{ survey_data.quarters_reported|join:", "|default:"None" }}</td></tr>
+        <tr><th>Status</th><td>{% if survey_data.has_incomplete %}<span class="badge badge-warning">Incomplete</span>{% else %}<span class="badge badge-success">Complete</span>{% endif %}</td></tr>
+        <tr><th>Citizenship Points</th><td>{{ survey_data.citizenship_points|default:0 }}</td></tr>
+        <tr><th>Education Points</th><td>{{ survey_data.education_points|default:0 }}</td></tr>
+        <tr><th>Research Points</th><td>{{ survey_data.research_points|default:0 }}</td></tr>
+        <tr><th>Leadership Points</th><td>{{ survey_data.leadership_points|default:0 }}</td></tr>
+        <tr><th>Content Expert Points</th><td>{{ survey_data.content_expert_points|default:0 }}</td></tr>
+        <tr><th><strong>Survey Total</strong></th><td><strong>{{ survey_data.survey_total_points|default:0 }}</strong></td></tr>
+    </table>
+</div>
+{% endif %}
+
+{% if dept_data %}
+<div class="card">
+    <h3>Departmental Data - AY {{ current_year.year_code }}</h3>
+    <table>
+        <tr><th>New Innovations (80%+)</th><td>{% if dept_data.new_innovations %}Yes (2,000 pts){% else %}No{% endif %}</td></tr>
+        <tr><th>MyTIP Winner</th><td>{% if dept_data.mytip_winner %}Yes (250 pts){% else %}No{% endif %}</td></tr>
+        <tr><th>MyTIP Count</th><td>{{ dept_data.mytip_count }} ({{ dept_data.mytip_count|default:0 }} x 25 = {{ dept_data.mytip_count|default:0|add:0 }} pts)</td></tr>
+        <tr><th>Top 25%</th><td>{% if dept_data.teaching_top_25 %}Yes (2,500 pts){% else %}No{% endif %}</td></tr>
+        <tr><th>65-25%</th><td>{% if dept_data.teaching_65_25 %}Yes (1,000 pts){% else %}No{% endif %}</td></tr>
+        <tr><th>Teacher of Year</th><td>{% if dept_data.teacher_of_year %}Yes (7,500 pts){% else %}No{% endif %}</td></tr>
+        <tr><th>Honorable Mention</th><td>{% if dept_data.honorable_mention %}Yes (5,000 pts){% else %}No{% endif %}</td></tr>
+        <tr><th><strong>Departmental Total</strong></th><td><strong>{{ dept_data.departmental_total_points }}</strong></td></tr>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

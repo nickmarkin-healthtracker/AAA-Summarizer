@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<h1>Academic Achievement Summarizer</h1>
+<p class="subtitle">UNMC Department of Anesthesiology</p>
+
+<div class="nav">
+    <a href="{% url 'index' %}" class="active">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h2>Quick Actions</h2>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
+    <div class="card">
+        <h3>Faculty Roster</h3>
+        <p>Manage the department faculty list. Import from Faculty Calculator or add manually.</p>
+        <a href="{% url 'roster' %}" class="btn">View Roster</a>
+        <a href="{% url 'import_roster' %}" class="btn btn-secondary">Import CSV</a>
+    </div>
+
+    <div class="card">
+        <h3>Import Survey Data</h3>
+        <p>Upload REDCap export and match to faculty roster.</p>
+        <a href="{% url 'import_survey' %}" class="btn">Import Survey</a>
+        <a href="{% url 'import_history' %}" class="btn btn-secondary">History</a>
+    </div>
+
+    <div class="card">
+        <h3>Departmental Data</h3>
+        <p>Enter teaching awards, evaluations, and other department-tracked items.</p>
+        <a href="{% url 'departmental_data' %}" class="btn">Enter Data</a>
+    </div>
+
+    <div class="card">
+        <h3>Generate Reports</h3>
+        <p>Export points summaries and faculty reports with combined data.</p>
+        <a href="{% url 'reports_dashboard' %}" class="btn btn-success">Reports</a>
+    </div>
+</div>
+
+<h2>Quick Upload (Session-Based)</h2>
+<div class="card">
+    <h3>One-Off CSV Processing</h3>
+    <p>For quick processing without saving to database. Data is session-only.</p>
+
+    {% if has_data %}
+    <p><strong>You have session data loaded.</strong></p>
+    <a href="{% url 'select_export' %}" class="btn btn-success">Continue</a>
+    <a href="?clear=1" class="btn btn-secondary">Clear</a>
+    {% else %}
+    <form method="post" action="{% url 'upload_csv' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="file" name="csv_file" accept=".csv" required>
+        <br><br>
+        <button type="submit" class="btn btn-secondary">Quick Upload</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

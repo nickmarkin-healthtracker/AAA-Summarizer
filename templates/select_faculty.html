@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Select Faculty - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'select_export' %}">← Back to Export Options</a>
+</div>
+
+<h1>Select Faculty Members</h1>
+<p class="subtitle">Choose which faculty members to include in the export</p>
+
+<form method="post" action="{% url 'export_faculty' %}">
+    {% csrf_token %}
+
+    <div class="actions">
+        <button type="button" onclick="selectAll()" class="btn btn-secondary">Select All</button>
+        <button type="button" onclick="deselectAll()" class="btn btn-secondary">Deselect All</button>
+        <span style="margin-left: 20px;" id="selection-count">0 selected</span>
+    </div>
+
+    <div class="checkbox-list">
+        {% for fac in faculty_list %}
+        <div class="checkbox-item">
+            <input type="checkbox" name="faculty" value="{{ fac.email }}" id="fac_{{ forloop.counter }}" onchange="updateCount()">
+            <label for="fac_{{ forloop.counter }}">
+                <strong>{{ fac.display_name }}</strong>
+                <br><small style="color: #666;">{{ fac.email }}</small>
+            </label>
+            <span class="points">{{ fac.total_points|floatformat:0 }} pts</span>
+            {% if fac.has_incomplete %}
+            <span class="status incomplete">INCOMPLETE</span>
+            {% else %}
+            <span class="status complete">Complete</span>
+            {% endif %}
+        </div>
+        {% empty %}
+        <p style="padding: 20px; text-align: center; color: #666;">No faculty members found.</p>
+        {% endfor %}
+    </div>
+
+    <h2>Export Options</h2>
+
+    <div class="form-group">
+        <label for="format">Output Format</label>
+        <select name="format" id="format">
+            <option value="pdf">PDF</option>
+            <option value="md">Markdown</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="combined" checked>
+            Combine into single document
+        </label>
+        <br><small style="color: #666;">When unchecked with multiple selections, downloads as ZIP with separate files</small>
+    </div>
+
+    <button type="submit" class="btn btn-success">Export Selected Faculty</button>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function selectAll() {
+    document.querySelectorAll('input[name="faculty"]').forEach(cb => cb.checked = true);
+    updateCount();
+}
+
+function deselectAll() {
+    document.querySelectorAll('input[name="faculty"]').forEach(cb => cb.checked = false);
+    updateCount();
+}
+
+function updateCount() {
+    const count = document.querySelectorAll('input[name="faculty"]:checked').length;
+    document.getElementById('selection-count').textContent = count + ' selected';
+}
+</script>
+{% endblock %}

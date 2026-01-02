@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Roster - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}">Reports</a>
+</div>
+
+<h1>Import Faculty Roster</h1>
+
+<div class="card">
+    <h3>Upload Faculty Calculator Export</h3>
+    <p>Import faculty from a CSV exported from the Faculty Calculator application.</p>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label>CSV File</label>
+            <input type="file" name="csv_file" accept=".csv" required>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="update_existing" checked>
+                Update existing faculty records
+            </label>
+            <p style="color: #666; font-size: 13px; margin-top: 5px;">
+                If checked, existing faculty (matched by email) will be updated with new data.
+                If unchecked, existing faculty will be skipped.
+            </p>
+        </div>
+
+        <button type="submit" class="btn">Import Roster</button>
+        <a href="{% url 'roster' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Expected CSV Format</h3>
+    <p>The CSV should contain these columns (from Faculty Calculator export):</p>
+    <ul style="margin-left: 20px;">
+        <li><strong>email</strong> - Required (primary identifier)</li>
+        <li><strong>first_name</strong> - Required</li>
+        <li><strong>last_name</strong> - Required</li>
+        <li><strong>rank</strong> - Optional (Instructor, Assistant Professor, etc.)</li>
+        <li><strong>contract_type</strong> - Optional (Academic, Clinical, Early Career)</li>
+        <li><strong>division</strong> - Optional</li>
+    </ul>
+</div>
+{% endblock %}

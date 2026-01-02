@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}Reports - Academic Achievement Summarizer{% endblock %}
+
+{% block content %}
+<div class="nav">
+    <a href="{% url 'index' %}">Dashboard</a>
+    <a href="{% url 'roster' %}">Faculty Roster</a>
+    <a href="{% url 'import_survey' %}">Import Survey</a>
+    <a href="{% url 'departmental_data' %}">Departmental Data</a>
+    <a href="{% url 'reports_dashboard' %}" class="active">Reports</a>
+</div>
+
+<h1>Reports</h1>
+
+<div class="summary-stats">
+    <div class="stat">
+        <div class="stat-value">{{ faculty_count }}</div>
+        <div class="stat-label">Faculty with Data</div>
+    </div>
+    <div class="stat">
+        <div class="stat-value">AY {{ current_year.year_code }}</div>
+        <div class="stat-label">Current Year</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
+    <div class="card">
+        <h3>Points Summary (CSV)</h3>
+        <p>Export all faculty points including survey, departmental, and CCC points.</p>
+        <a href="{% url 'db_export_points' %}" class="btn">Download CSV</a>
+    </div>
+
+    <div class="card">
+        <h3>Faculty Summaries</h3>
+        <p>Generate individual or combined faculty reports in PDF or Markdown.</p>
+        <a href="{% url 'db_select_faculty' %}" class="btn">Select Faculty</a>
+    </div>
+</div>
+
+<h2>Select Academic Year</h2>
+<div class="card">
+    <form method="get" action="{% url 'db_export_points' %}">
+        <div class="form-group">
+            <label>Export Points for:</label>
+            <select name="year">
+                {% for year in years %}
+                <option value="{{ year.year_code }}" {% if year.is_current %}selected{% endif %}>
+                    AY {{ year.year_code }}{% if year.is_current %} (Current){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-secondary">Download Points CSV</button>
+    </form>
+</div>
+{% endblock %}
