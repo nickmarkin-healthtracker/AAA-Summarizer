@@ -559,7 +559,7 @@ def import_review(request):
         entry = {
             'email': email,
             'display_name': data.get('display_name', ''),
-            'total_points': data.get('total_points', 0),
+            'total_points': data.get('totals', {}).get('total', 0),
             'quarters': data.get('quarters_reported', []),
             'has_incomplete': data.get('has_incomplete', False),
         }
@@ -636,7 +636,7 @@ def import_confirm(request):
                         'research_points': data.get('totals', {}).get('research', 0),
                         'leadership_points': data.get('totals', {}).get('leadership', 0),
                         'content_expert_points': data.get('totals', {}).get('content_expert', 0),
-                        'survey_total_points': data.get('total_points', 0),
+                        'survey_total_points': data.get('totals', {}).get('total', 0),
                         'activities_json': data.get('activities', {}),
                     }
                 )
