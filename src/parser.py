@@ -234,8 +234,9 @@ def parse_repeating_indexed(
                         entry[key] = value
 
         # Get points - look for the specific numbered points column
+        # Use start_occurrence to get the correct section's points columns
         points_col = f"{points_pattern}{entry_num + 1}"
-        points_value = get_col_value(row, col_index, points_col)
+        points_value = get_col_value(row, col_index, points_col, occurrence=start_occurrence)
         if points_value:
             try:
                 points = int(float(points_value))

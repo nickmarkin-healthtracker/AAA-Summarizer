@@ -2,17 +2,9 @@
 
 {% block title %}Reports - Academic Achievement Summarizer{% endblock %}
 
+{% block page_title %}Reports{% endblock %}
+
 {% block content %}
-<div class="nav">
-    <a href="{% url 'index' %}">Dashboard</a>
-    <a href="{% url 'roster' %}">Faculty Roster</a>
-    <a href="{% url 'import_survey' %}">Import Survey</a>
-    <a href="{% url 'departmental_data' %}">Departmental Data</a>
-    <a href="{% url 'reports_dashboard' %}" class="active">Reports</a>
-</div>
-
-<h1>Reports</h1>
-
 <div class="summary-stats">
     <div class="stat">
         <div class="stat-value">{{ faculty_count }}</div>
@@ -28,27 +20,33 @@
     <div class="card">
         <h3>Points Summary (CSV)</h3>
         <p>Export all faculty points including survey, departmental, and CCC points.</p>
-        <a href="{% url 'db_export_points' %}" class="btn">Download CSV</a>
+        <a href="{% url 'db_export_points' %}" class="btn btn-app">Download CSV</a>
     </div>
 
     <div class="card">
         <h3>Faculty Summaries</h3>
         <p>Generate individual or combined faculty reports in PDF or Markdown.</p>
-        <a href="{% url 'db_select_faculty' %}" class="btn">Select Faculty</a>
+        <a href="{% url 'db_select_faculty' %}" class="btn btn-app">Select Faculty</a>
     </div>
 
     <div class="card">
         <h3>Activity Type Reports</h3>
         <p>Generate reports grouped by activity type (e.g., all invited lectures, all committee memberships).</p>
-        <a href="{% url 'db_select_activities' %}" class="btn">Select Activities</a>
+        <a href="{% url 'db_select_activities' %}" class="btn btn-app">Select Activities</a>
+    </div>
+
+    <div class="card">
+        <h3>Verify Impact Factors</h3>
+        <p>Compare self-reported IFs against OpenAlex data. Flags publications with difference &ge; 2.</p>
+        <a href="{% url 'verify_impact_factors' %}" class="btn btn-app btn-secondary">Verify IFs</a>
     </div>
 </div>
 
-<h2>Select Academic Year</h2>
+<h2>Export Points Summary</h2>
 <div class="card">
     <form method="get" action="{% url 'db_export_points' %}">
-        <div class="form-group">
-            <label>Export Points for:</label>
+        <div class="form-group" style="display: inline-block; margin-right: 20px;">
+            <label>Academic Year:</label>
             <select name="year">
                 {% for year in years %}
                 <option value="{{ year.year_code }}" {% if year.is_current %}selected{% endif %}>
@@ -57,7 +55,16 @@
                 {% endfor %}
             </select>
         </div>
-        <button type="submit" class="btn btn-secondary">Download Points CSV</button>
+        <div class="form-group" style="display: inline-block;">
+            <label>Faculty Selection:</label>
+            <select name="filter">
+                <option value="all">All Faculty</option>
+                <option value="avc_eligible">AVC Eligible Only</option>
+            </select>
+        </div>
+        <div style="margin-top: 15px;">
+            <button type="submit" class="btn btn-secondary">Download Points CSV</button>
+        </div>
     </form>
 </div>
 {% endblock %}

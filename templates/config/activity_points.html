@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+
+{% block title %}Activity Points Configuration - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}Activity Points Configuration{% endblock %}
+
+{% block extra_css %}
+<style>
+    .category-section {
+        margin-bottom: 30px;
+    }
+    .category-header {
+        background: #34495e;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 5px 5px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .category-header h3 {
+        margin: 0;
+        font-size: 18px;
+    }
+    .category-count {
+        background: rgba(255,255,255,0.2);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+    }
+    .goal-section {
+        border: 1px solid #ddd;
+        border-top: none;
+        padding: 15px 20px;
+        background: #fafafa;
+    }
+    .goal-section:last-child {
+        border-radius: 0 0 5px 5px;
+    }
+    .goal-header {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 10px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #ddd;
+    }
+    .activity-table {
+        width: 100%;
+        font-size: 14px;
+    }
+    .activity-table th {
+        text-align: left;
+        padding: 8px;
+        background: #f0f0f0;
+        font-weight: 500;
+    }
+    .activity-table td {
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+    }
+    .activity-table tr:hover {
+        background: #f8f8f8;
+    }
+    .points-badge {
+        background: #27ae60;
+        color: white;
+        padding: 3px 10px;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    .points-badge.impact-factor {
+        background: #9b59b6;
+    }
+    .points-badge.count {
+        background: #3498db;
+    }
+    .modifier-tag {
+        font-size: 11px;
+        color: #666;
+        margin-left: 5px;
+    }
+    .data-var {
+        font-family: monospace;
+        font-size: 12px;
+        color: #888;
+    }
+    .edit-btn {
+        padding: 3px 10px;
+        font-size: 12px;
+        background: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        text-decoration: none;
+    }
+    .edit-btn:hover {
+        background: #5a6268;
+        color: white;
+    }
+    .dept-badge {
+        background: #f39c12;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        margin-left: 5px;
+    }
+    .summary-stats {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    .stat-card {
+        background: #f8f9fa;
+        padding: 15px 20px;
+        border-radius: 5px;
+        border: 1px solid #dee2e6;
+    }
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .stat-label {
+        font-size: 12px;
+        color: #666;
+        text-transform: uppercase;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+    <div class="summary-stats" style="margin-bottom: 0;">
+        <div class="stat-card">
+            <div class="stat-value">{{ total_activities }}</div>
+            <div class="stat-label">Activity Types</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ config_data|length }}</div>
+            <div class="stat-label">Categories</div>
+        </div>
+    </div>
+    <a href="{% url 'activity_type_create' %}" class="btn btn-success" style="padding: 10px 20px; font-size: 14px;">
+        <i class="bi bi-plus-lg"></i> Create Activity Type
+    </a>
+</div>
+
+<p style="color: #666; margin-bottom: 20px;">
+    Configure point values for all activity types. Changes here will affect future point calculations.
+    <br><small>Data variables map to REDCap survey fields for automatic point calculation.</small>
+</p>
+
+{% for cat_data in config_data %}
+<div class="category-section">
+    <div class="category-header">
+        <h3>{{ cat_data.category.display_name }}</h3>
+        <span class="category-count">{{ cat_data.total_types }} activities</span>
+    </div>
+
+    {% for goal_data in cat_data.goals %}
+    <div class="goal-section">
+        <div class="goal-header">{{ goal_data.goal.display_name }}</div>
+        <table class="activity-table">
+            <thead>
+                <tr>
+                    <th style="width: 35%;">Activity</th>
+                    <th style="width: 20%;">Data Variable</th>
+                    <th style="width: 15%;">Points</th>
+                    <th style="width: 20%;">Notes</th>
+                    <th style="width: 10%;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for activity in goal_data.activity_types %}
+                <tr>
+                    <td>
+                        {{ activity.display_name }}
+                        {% if activity.is_departmental %}<span class="dept-badge">DEPT</span>{% endif %}
+                    </td>
+                    <td><span class="data-var">{{ activity.data_variable }}</span></td>
+                    <td>
+                        <span class="points-badge {% if activity.modifier_type == 'impact_factor' %}impact-factor{% elif activity.modifier_type == 'count' %}count{% endif %}">
+                            {{ activity.base_points }}
+                        </span>
+                        {% if activity.modifier_type == 'count' %}
+                            <span class="modifier-tag">x count</span>
+                        {% elif activity.modifier_type == 'impact_factor' %}
+                            <span class="modifier-tag">x IF</span>
+                        {% endif %}
+                        {% if activity.max_points %}
+                            <span class="modifier-tag">(max {{ activity.max_points }})</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size: 12px; color: #666;">{{ activity.notes|truncatewords:10 }}</td>
+                    <td>
+                        <a href="{% url 'activity_type_edit' activity.pk %}" class="edit-btn">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

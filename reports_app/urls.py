@@ -11,6 +11,8 @@ urlpatterns = [
     # === Academic Year Management ===
     path('years/', views.academic_year_list, name='year_list'),
     path('years/set-current/', views.set_current_year, name='set_current_year'),
+    path('years/select/', views.select_year, name='select_year'),
+    path('years/create/', views.create_year, name='create_year'),
 
     # === Faculty Roster Management ===
     path('roster/', views.faculty_roster, name='roster'),
@@ -18,6 +20,9 @@ urlpatterns = [
     path('roster/<str:email>/', views.faculty_detail, name='faculty_detail'),
     path('roster/<str:email>/edit/', views.faculty_edit, name='faculty_edit'),
     path('roster/<str:email>/toggle-ccc/', views.toggle_ccc, name='toggle_ccc'),
+
+    # === Faculty Summary ===
+    path('faculty-summary/', views.faculty_summary, name='faculty_summary'),
 
     # === Survey Data Import (Database-backed) ===
     path('import/', views.import_survey, name='import_survey'),
@@ -27,8 +32,8 @@ urlpatterns = [
 
     # === Departmental Data Entry ===
     path('departmental/', views.departmental_data, name='departmental_data'),
-    path('departmental/<str:year_code>/', views.departmental_data, name='departmental_data_year'),
     path('departmental/update/', views.departmental_update, name='departmental_update'),
+    path('departmental/<str:year_code>/', views.departmental_data, name='departmental_data_year'),
 
     # === Legacy Session-Based Upload (for quick one-off use) ===
     path('quick-upload/', views.upload_csv, name='upload_csv'),
@@ -46,4 +51,24 @@ urlpatterns = [
     path('reports/faculty/export/', views.db_export_faculty, name='db_export_faculty'),
     path('reports/activities/', views.db_select_activities, name='db_select_activities'),
     path('reports/activities/export/', views.db_export_activities, name='db_export_activities'),
+    path('reports/verify-if/', views.verify_impact_factors, name='verify_impact_factors'),
+
+    # === Activity Browse & Edit ===
+    path('activities/', views.activity_category_list, name='activity_categories'),
+    # Specific paths must come before generic <str:category> patterns
+    path('activities/faculty/<str:email>/', views.faculty_activities, name='faculty_activities'),
+    path('activities/add/<str:email>/', views.add_activity, name='add_activity'),
+    path('activities/add/<str:email>/<str:category>/<str:subcategory>/', views.add_activity_form, name='add_activity_form'),
+    path('activities/edit/<str:email>/<str:category>/<str:subcategory>/<int:index>/', views.edit_activity, name='edit_activity'),
+    path('activities/delete/<str:email>/<str:category>/<str:subcategory>/<int:index>/', views.delete_activity, name='delete_activity'),
+    # Generic category patterns last
+    path('activities/<str:category>/', views.activity_type_list, name='activity_types'),
+    path('activities/<str:category>/<str:subcategory>/', views.activity_role_list, name='activity_roles'),
+    path('activities/<str:category>/<str:subcategory>/all/', views.activity_entries, name='activity_entries'),
+    path('activities/<str:category>/<str:subcategory>/<str:role>/', views.activity_entries_by_role, name='activity_entries_by_role'),
+
+    # === Activity Points Configuration ===
+    path('config/points/', views.activity_points_config, name='activity_points_config'),
+    path('config/points/create/', views.activity_type_create, name='activity_type_create'),
+    path('config/points/<int:pk>/edit/', views.activity_type_edit, name='activity_type_edit'),
 ]

@@ -589,6 +589,7 @@ ACTIVITY_DISPLAY_NAMES = {
     "board_prep": "Board Preparation Activities",
     "mentorship": "Trainee Mentorship",
     "feedback": "MyTIPreport & MTR",
+    "rotation_director": "Rotation Director",
 
     # Research
     "grant_review": "Grant Review (NIH Study Section)",

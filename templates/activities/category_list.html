@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Browse Activities - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}Browse Activities{% endblock %}
+
+{% block content %}
+<h1>Browse Activities</h1>
+
+<div class="actions" style="margin-bottom: 15px;">
+    <form method="get" style="display: inline;">
+        <label>Academic Year:</label>
+        <select name="year" onchange="this.form.submit()">
+            {% for year in years %}
+            <option value="{{ year.year_code }}" {% if year.year_code == academic_year.year_code %}selected{% endif %}>
+                AY {{ year.year_code }}{% if year.is_current %} (Current){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Imported</th>
+            <th>Manual</th>
+            <th>Total</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cat_key, cat in categories.items %}
+        <tr>
+            <td><strong>{{ cat.name }}</strong></td>
+            <td>{{ cat.imported }}</td>
+            <td>{{ cat.manual }}</td>
+            <td>{{ cat.imported|add:cat.manual }}</td>
+            <td>
+                <a href="{% url 'activity_types' cat_key %}?year={{ academic_year.year_code }}" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">
+                    View Details
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top: 20px;">
+    <p style="color: #666; font-size: 14px;">
+        <strong>Imported:</strong> Activities from REDCap survey submissions<br>
+        <strong>Manual:</strong> Activities added manually through this interface
+    </p>
+</div>
+{% endblock %}

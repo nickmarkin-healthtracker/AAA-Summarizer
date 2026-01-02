@@ -2,17 +2,130 @@
 
 {% block title %}Dashboard - Academic Achievement Summarizer{% endblock %}
 
-{% block content %}
-<h1>Academic Achievement Summarizer</h1>
-<p class="subtitle">UNMC Department of Anesthesiology</p>
+{% block page_title %}Dashboard{% endblock %}
 
-<div class="nav">
-    <a href="{% url 'index' %}" class="active">Dashboard</a>
-    <a href="{% url 'roster' %}">Faculty Roster</a>
-    <a href="{% url 'import_survey' %}">Import Survey</a>
-    <a href="{% url 'departmental_data' %}">Departmental Data</a>
-    <a href="{% url 'reports_dashboard' %}">Reports</a>
+{% block extra_css %}
+<style>
+    .overview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+    .overview-card {
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+    }
+    .overview-card .value {
+        font-size: 32px;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .overview-card .label {
+        font-size: 13px;
+        color: #666;
+        text-transform: uppercase;
+        margin-top: 5px;
+    }
+    .quarter-status {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .quarter-badge {
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 500;
+        font-size: 14px;
+    }
+    .quarter-badge.has-data {
+        background: #d4edda;
+        color: #155724;
+    }
+    .quarter-badge.no-data {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    .activity-breakdown {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 15px;
+    }
+    .activity-item {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+    }
+    .activity-item .count {
+        font-size: 20px;
+        font-weight: bold;
+        color: #3498db;
+    }
+    .activity-item .name {
+        font-size: 11px;
+        color: #666;
+        text-transform: uppercase;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if academic_year %}
+<h2>Data Overview - AY {{ academic_year.year_code }}</h2>
+
+<div class="overview-grid">
+    <div class="overview-card">
+        <div class="value">{{ stats.total_faculty }}</div>
+        <div class="label">Total Faculty</div>
+    </div>
+    <div class="overview-card">
+        <div class="value">{{ stats.avc_eligible_faculty }}</div>
+        <div class="label">AVC Eligible</div>
+    </div>
+    <div class="overview-card">
+        <div class="value">{{ stats.faculty_with_data }}</div>
+        <div class="label">With Survey Data</div>
+    </div>
+    <div class="overview-card">
+        <div class="value">{{ stats.total_activities }}</div>
+        <div class="label">Total Activities</div>
+    </div>
 </div>
+
+<div class="card" style="margin-bottom: 25px;">
+    <h3>Quarter Coverage</h3>
+    <p style="color: #666; margin-bottom: 15px;">Number of faculty who have reported data for each quarter:</p>
+    <div class="quarter-status">
+        <span class="quarter-badge {% if stats.q1_q2 > 0 %}has-data{% else %}no-data{% endif %}">
+            Q1-Q2: {{ stats.q1_q2 }} faculty
+        </span>
+        <span class="quarter-badge {% if stats.q3 > 0 %}has-data{% else %}no-data{% endif %}">
+            Q3: {{ stats.q3 }} faculty
+        </span>
+        <span class="quarter-badge {% if stats.q4 > 0 %}has-data{% else %}no-data{% endif %}">
+            Q4: {{ stats.q4 }} faculty
+        </span>
+    </div>
+
+    {% if stats.activity_counts %}
+    <h4 style="margin-top: 20px;">Activities by Category</h4>
+    <div class="activity-breakdown">
+        {% for category, count in stats.activity_counts.items %}
+        <div class="activity-item">
+            <div class="count">{{ count }}</div>
+            <div class="name">{{ category|title }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
 
 <h2>Quick Actions</h2>
 

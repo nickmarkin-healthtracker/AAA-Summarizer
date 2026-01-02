@@ -301,15 +301,16 @@ def get_table_columns(subcat: str) -> List[Dict[str, Any]]:
             {"key": "points", "header": "Points", "align": "right", "format": "points"},
         ],
         "publications_peer": [
-            {"key": "role", "header": "Role"},
+            {"key": "type", "header": "Role"},  # Parser stores role as 'type'
             {"key": "title", "header": "Title"},
             {"key": "journal", "header": "Journal"},
             {"key": "impact_factor", "header": "IF"},
+            {"key": "doi", "header": "DOI"},
             {"key": "date", "header": "Date"},
             {"key": "points", "header": "Points", "align": "right", "format": "points"},
         ],
         "publications_nonpeer": [
-            {"key": "role", "header": "Role"},
+            {"key": "type", "header": "Role"},  # Parser stores role as 'type'
             {"key": "title", "header": "Title"},
             {"key": "outlet", "header": "Outlet"},
             {"key": "date", "header": "Date"},
@@ -322,14 +323,14 @@ def get_table_columns(subcat: str) -> List[Dict[str, Any]]:
             {"key": "points", "header": "Points", "align": "right", "format": "points"},
         ],
         "textbooks": [
-            {"key": "role", "header": "Role"},
+            {"key": "type", "header": "Role"},  # Parser stores role as 'type'
             {"key": "textbook", "header": "Textbook"},
             {"key": "section", "header": "Section"},
             {"key": "chapter", "header": "Chapter"},
             {"key": "points", "header": "Points", "align": "right", "format": "points"},
         ],
         "abstracts": [
-            {"key": "role", "header": "Role"},
+            {"key": "type", "header": "Role"},  # Parser stores role as 'type'
             {"key": "title", "header": "Title"},
             {"key": "meeting", "header": "Meeting"},
             {"key": "date", "header": "Date"},

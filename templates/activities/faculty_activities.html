@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ faculty.display_name }} Activities - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}{{ faculty.display_name }} - Activities{% endblock %}
+
+{% block extra_css %}
+<style>
+    .activity-section {
+        margin-bottom: 30px;
+    }
+    .activity-section h3 {
+        background: #34495e;
+        color: white;
+        padding: 10px 15px;
+        margin: 0 0 10px 0;
+        border-radius: 5px 5px 0 0;
+    }
+    .activity-subsection {
+        margin-left: 20px;
+        margin-bottom: 15px;
+    }
+    .activity-subsection h4 {
+        color: #2c3e50;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 5px;
+    }
+    .activity-entry {
+        background: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        padding: 10px;
+        margin-bottom: 5px;
+        font-size: 14px;
+    }
+    .activity-entry.manual {
+        border-left: 3px solid #3498db;
+    }
+    .manual-badge {
+        background: #3498db;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        margin-left: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ faculty.display_name }}</h1>
+<p>
+    <a href="{% url 'faculty_detail' faculty.email %}">View Faculty Profile</a> |
+    <a href="{% url 'add_activity' faculty.email %}?year={{ academic_year.year_code }}" class="btn btn-success" style="padding: 5px 15px;">Add Activity</a>
+</p>
+
+<div class="actions" style="margin-bottom: 15px;">
+    <form method="get" style="display: inline;">
+        <label>Academic Year:</label>
+        <select name="year" onchange="this.form.submit()">
+            {% for year in years %}
+            <option value="{{ year.year_code }}" {% if year.year_code == academic_year.year_code %}selected{% endif %}>
+                AY {{ year.year_code }}{% if year.is_current %} (Current){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+{% if survey_data %}
+    <div class="summary-stats">
+        <div class="stat">
+            <div class="stat-value">{{ survey_data.survey_total_points }}</div>
+            <div class="stat-label">Survey Points</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{{ survey_data.quarters_reported|join:", " }}</div>
+            <div class="stat-label">Quarters Reported</div>
+        </div>
+    </div>
+
+    {% for category_name, subcategories in activity_summary.items %}
+        {% if subcategories %}
+        <div class="activity-section">
+            <h3>{{ category_name }}</h3>
+            {% for subcat_name, entries in subcategories.items %}
+                <div class="activity-subsection">
+                    <h4>{{ subcat_name }} ({{ entries|length }})</h4>
+                    {% for entry in entries %}
+                    <div class="activity-entry {% if entry.source == 'manual' %}manual{% endif %}">
+                        {% if entry.source == 'manual' %}<span class="manual-badge">Manual</span>{% endif %}
+                        {% for key, value in entry.items %}
+                            {% if key != 'source' and key != 'added_at' and key != 'edited_at' and key != 'record_id' and key != 'quarter' and value %}
+                                <strong>{{ key|title }}:</strong> {{ value }}{% if not forloop.last %} | {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if entry.source == 'manual' %}
+                        <span style="float: right;">
+                            <a href="{% url 'edit_activity' faculty.email entry.category entry.subcategory entry.index %}?year={{ academic_year.year_code }}" style="font-size: 12px;">Edit</a>
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% empty %}
+        <p style="color: #666; text-align: center; padding: 40px;">No activities recorded for this academic year.</p>
+    {% endfor %}
+{% else %}
+    <p style="color: #666; text-align: center; padding: 40px;">
+        No survey data for this faculty member in AY {{ academic_year.year_code }}.<br>
+        <a href="{% url 'add_activity' faculty.email %}?year={{ academic_year.year_code }}">Add a manual activity</a>
+    </p>
+{% endif %}
+{% endblock %}

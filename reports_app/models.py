@@ -125,7 +125,22 @@ class FacultyMember(models.Model):
         default=''
     )
 
-    division = models.CharField(max_length=100, blank=True, default='')
+    DIVISION_CHOICES = [
+        ('cardiac', 'Cardiac'),
+        ('critical_care', 'Critical Care'),
+        ('multispecialty', 'Multispecialty'),
+        ('pain', 'Pain'),
+        ('transplant', 'Transplant'),
+        ('pediatric', 'Pediatric'),
+        ('surgery', 'Surgery'),
+        ('emergency_medicine', 'Emergency Medicine'),
+    ]
+    division = models.CharField(
+        max_length=50,
+        choices=DIVISION_CHOICES,
+        blank=True,
+        default=''
+    )
     is_active = models.BooleanField(default=True)
 
     # CCC membership persists year-to-year (1000 points)
@@ -133,6 +148,13 @@ class FacultyMember(models.Model):
         default=False,
         verbose_name='CCC Member',
         help_text='Clinical Competency Committee member (1000 pts, persists year-to-year)'
+    )
+
+    # AVC eligibility - determines if faculty is included in AVC reports
+    is_avc_eligible = models.BooleanField(
+        default=True,
+        verbose_name='AVC Eligible',
+        help_text='Include this faculty in AVC point calculations and reports'
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -237,7 +259,13 @@ class FacultySurveyData(models.Model):
     # Raw activities data (full JSON from parser for detailed reports)
     activities_json = models.JSONField(
         default=dict,
-        help_text='Complete activity data structure from parser'
+        help_text='Complete activity data structure from parser (overwrites on import)'
+    )
+
+    # Manually added/edited activities (preserved during CSV imports)
+    manual_activities_json = models.JSONField(
+        default=dict,
+        help_text='Manually added activities - never overwritten by import'
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -348,7 +376,8 @@ class DepartmentalData(models.Model):
 
     # === Point Calculation Properties ===
 
-    POINT_VALUES = {
+    # Default point values (used as fallback if DB lookup fails)
+    DEFAULT_POINT_VALUES = {
         'new_innovations': 2000,
         'mytip_winner': 250,
         'mytip_per': 25,  # per count, max 20
@@ -359,37 +388,196 @@ class DepartmentalData(models.Model):
         'ccc_member': 1000,  # stored on FacultyMember
     }
 
+    @classmethod
+    def get_point_values(cls):
+        """
+        Get current point values from database, with fallback to defaults.
+
+        This allows point values to be configured via the Activity Points Config page.
+        """
+        # Import here to avoid circular import
+        try:
+            from .points_utils import get_departmental_point_values
+            db_values = get_departmental_point_values()
+            # Merge with defaults (DB values override defaults)
+            return {**cls.DEFAULT_POINT_VALUES, **db_values}
+        except Exception:
+            return cls.DEFAULT_POINT_VALUES
+
+    # For backwards compatibility, expose POINT_VALUES as property
+    @property
+    def POINT_VALUES(self):
+        return self.get_point_values()
+
     @property
     def evaluations_points(self):
         """Calculate total points from evaluations section."""
+        pv = self.get_point_values()
         total = 0
         if self.new_innovations:
-            total += self.POINT_VALUES['new_innovations']
+            total += pv['new_innovations']
         if self.mytip_winner:
-            total += self.POINT_VALUES['mytip_winner']
-        total += min(self.mytip_count, 20) * self.POINT_VALUES['mytip_per']
+            total += pv['mytip_winner']
+        total += min(self.mytip_count, 20) * pv['mytip_per']
         return total
 
     @property
     def teaching_awards_points(self):
         """Calculate total points from teaching awards section."""
+        pv = self.get_point_values()
         total = 0
         if self.teaching_top_25:
-            total += self.POINT_VALUES['teaching_top_25']
+            total += pv['teaching_top_25']
         if self.teaching_65_25:
-            total += self.POINT_VALUES['teaching_65_25']
+            total += pv['teaching_65_25']
         if self.teacher_of_year:
-            total += self.POINT_VALUES['teacher_of_year']
+            total += pv['teacher_of_year']
         if self.honorable_mention:
-            total += self.POINT_VALUES['honorable_mention']
+            total += pv['honorable_mention']
         return total
 
     @property
     def ccc_points(self):
         """Calculate CCC points (from FacultyMember)."""
-        return self.POINT_VALUES['ccc_member'] if self.faculty.is_ccc_member else 0
+        pv = self.get_point_values()
+        return pv['ccc_member'] if self.faculty.is_ccc_member else 0
 
     @property
     def departmental_total_points(self):
         """Calculate total departmental points (including CCC)."""
         return self.evaluations_points + self.teaching_awards_points + self.ccc_points
+
+
+# =============================================================================
+# ACTIVITY POINTS CONFIGURATION
+# =============================================================================
+
+class ActivityCategory(models.Model):
+    """
+    Top-level category for activities (e.g., Citizenship, Education, Research).
+
+    These are the 5 main categories in the AVC points system.
+    """
+    name = models.CharField(max_length=100, unique=True)
+    display_name = models.CharField(max_length=100)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['sort_order', 'name']
+        verbose_name = 'Activity Category'
+        verbose_name_plural = 'Activity Categories'
+
+    def __str__(self):
+        return self.display_name
+
+
+class ActivityGoal(models.Model):
+    """
+    Goal/subcategory within a category (e.g., Evaluation, Committee Membership, Teaching).
+
+    Groups related activity types together.
+    """
+    category = models.ForeignKey(
+        ActivityCategory,
+        on_delete=models.CASCADE,
+        related_name='goals'
+    )
+    name = models.CharField(max_length=100)
+    display_name = models.CharField(max_length=100)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['category', 'sort_order', 'name']
+        unique_together = ['category', 'name']
+        verbose_name = 'Activity Goal'
+        verbose_name_plural = 'Activity Goals'
+
+    def __str__(self):
+        return f"{self.category.display_name} - {self.display_name}"
+
+
+class ActivityType(models.Model):
+    """
+    Specific activity type with point value (e.g., Grand Round Host = 300 pts).
+
+    Maps to REDCap data variables and defines the point calculation.
+    """
+    MODIFIER_CHOICES = [
+        ('fixed', 'Fixed Points'),
+        ('count', 'Points × Count'),
+        ('impact_factor', 'Points × Impact Factor'),
+    ]
+
+    goal = models.ForeignKey(
+        ActivityGoal,
+        on_delete=models.CASCADE,
+        related_name='activity_types'
+    )
+    name = models.CharField(max_length=200, help_text='Role/activity name')
+    display_name = models.CharField(max_length=200)
+    data_variable = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text='REDCap data variable name (e.g., CIT_DEPT_GR_HOST)'
+    )
+    base_points = models.IntegerField(default=0, help_text='Base point value')
+    modifier_type = models.CharField(
+        max_length=20,
+        choices=MODIFIER_CHOICES,
+        default='fixed',
+        help_text='How points are calculated'
+    )
+    max_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Maximum count for count-based activities (blank = no limit)'
+    )
+    max_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Maximum points cap (blank = no limit)'
+    )
+    notes = models.TextField(blank=True, help_text='Additional notes or requirements')
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    # For departmental tracking (not in REDCap survey)
+    is_departmental = models.BooleanField(
+        default=False,
+        help_text='True if this is tracked by department, not in survey'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['goal__category', 'goal', 'sort_order', 'name']
+        verbose_name = 'Activity Type'
+        verbose_name_plural = 'Activity Types'
+
+    def __str__(self):
+        return f"{self.display_name} ({self.base_points} pts)"
+
+    def calculate_points(self, count=1, impact_factor=1):
+        """Calculate points for this activity type."""
+        if self.modifier_type == 'fixed':
+            points = self.base_points
+        elif self.modifier_type == 'count':
+            effective_count = count
+            if self.max_count:
+                effective_count = min(count, self.max_count)
+            points = self.base_points * effective_count
+        elif self.modifier_type == 'impact_factor':
+            # Cap impact factor at 15, minimum 1
+            effective_if = max(1, min(impact_factor, 15))
+            points = self.base_points * effective_if
+        else:
+            points = self.base_points
+
+        # Apply max points cap if set
+        if self.max_points:
+            points = min(points, self.max_points)
+
+        return points

@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}Add {{ subcategory_name }} - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}Add {{ subcategory_name }}{% endblock %}
+
+{% block content %}
+<h1>Add {{ subcategory_name }}</h1>
+<p>
+    For: <strong>{{ faculty.display_name }}</strong> |
+    Category: <strong>{{ category_name }}</strong> |
+    AY {{ academic_year.year_code }}
+</p>
+<p><a href="{% url 'add_activity' faculty.email %}?year={{ academic_year.year_code }}">Back to Activity Types</a></p>
+
+<div class="card">
+    <form method="post">
+        {% csrf_token %}
+
+        {% for field in fields %}
+        <div class="form-group">
+            <label for="{{ field.key }}">{{ field.label }}</label>
+            {% if 'date' in field.key|lower %}
+            <input type="date" name="{{ field.key }}" id="{{ field.key }}">
+            {% elif 'title' in field.key|lower or 'name' in field.key|lower %}
+            <input type="text" name="{{ field.key }}" id="{{ field.key }}" style="width: 100%;">
+            {% else %}
+            <input type="text" name="{{ field.key }}" id="{{ field.key }}">
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="form-group">
+            <label for="points">Points</label>
+            <input type="number" name="points" id="points" min="0" required>
+            <p style="font-size: 12px; color: #666;">Enter the point value for this activity</p>
+        </div>
+
+        <button type="submit" class="btn btn-success">Add Activity</button>
+        <a href="{% url 'faculty_activities' faculty.email %}?year={{ academic_year.year_code }}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit {{ activity_type.display_name }} - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}Edit Activity Type{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'activity_points_config' %}">Back to Activity Points Configuration</a>
+</p>
+
+<div class="card">
+    <h3>{{ activity_type.goal.category.display_name }} &raquo; {{ activity_type.goal.display_name }}</h3>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="form-group">
+            <label>Data Variable (read-only)</label>
+            <input type="text" value="{{ activity_type.data_variable }}" disabled style="font-family: monospace; background: #f5f5f5;">
+        </div>
+
+        <div class="form-group">
+            <label for="display_name">Display Name</label>
+            <input type="text" name="display_name" id="display_name" value="{{ activity_type.display_name }}" required style="width: 100%;">
+        </div>
+
+        <div class="form-group">
+            <label for="base_points">Base Points</label>
+            <input type="number" name="base_points" id="base_points" value="{{ activity_type.base_points }}" required min="0">
+        </div>
+
+        <div class="form-group">
+            <label for="modifier_type">Point Calculation</label>
+            <select name="modifier_type" id="modifier_type">
+                {% for value, label in modifier_choices %}
+                <option value="{{ value }}" {% if activity_type.modifier_type == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <p style="font-size: 12px; color: #666; margin-top: 5px;">
+                <strong>Fixed:</strong> Award base points once<br>
+                <strong>Count:</strong> Base points multiplied by number of occurrences<br>
+                <strong>Impact Factor:</strong> Base points multiplied by journal impact factor (1-15)
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label for="max_count">Max Count (optional)</label>
+            <input type="number" name="max_count" id="max_count" value="{{ activity_type.max_count|default:'' }}" min="1">
+            <p style="font-size: 12px; color: #666;">Maximum number of times this can be counted. Leave blank for no limit.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="max_points">Max Points Cap (optional)</label>
+            <input type="number" name="max_points" id="max_points" value="{{ activity_type.max_points|default:'' }}" min="0">
+            <p style="font-size: 12px; color: #666;">Maximum points that can be earned. Leave blank for no limit.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="notes">Notes</label>
+            <textarea name="notes" id="notes" rows="3" style="width: 100%;">{{ activity_type.notes }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="is_active" {% if activity_type.is_active %}checked{% endif %}>
+                Active (uncheck to hide this activity type)
+            </label>
+        </div>
+
+        {% if activity_type.is_departmental %}
+        <div style="background: #fff3cd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+            <strong>Departmental Item:</strong> This activity is tracked by the department, not through the REDCap survey.
+        </div>
+        {% endif %}
+
+        <button type="submit" class="btn btn-success">Save Changes</button>
+        <a href="{% url 'activity_points_config' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+<div class="card" style="margin-top: 20px; background: #f8f9fa;">
+    <h4>Point Calculation Preview</h4>
+    <p style="font-size: 14px; color: #666;">
+        {% if activity_type.modifier_type == 'fixed' %}
+            <strong>Fixed:</strong> {{ activity_type.base_points }} points (awarded once)
+        {% elif activity_type.modifier_type == 'count' %}
+            <strong>Count-based:</strong> {{ activity_type.base_points }} points &times; count
+            {% if activity_type.max_count %}(max {{ activity_type.max_count }} count){% endif %}
+            {% if activity_type.max_points %}= up to {{ activity_type.max_points }} points{% endif %}
+        {% elif activity_type.modifier_type == 'impact_factor' %}
+            <strong>Impact Factor:</strong> {{ activity_type.base_points }} points &times; IF (1-15)
+            = {{ activity_type.base_points }} to {{ activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points|add:activity_type.base_points }} points
+        {% endif %}
+    </p>
+</div>
+{% endblock %}

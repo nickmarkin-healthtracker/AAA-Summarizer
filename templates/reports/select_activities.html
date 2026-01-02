@@ -2,15 +2,9 @@
 
 {% block title %}Select Activities - Academic Achievement Summarizer{% endblock %}
 
-{% block content %}
-<div class="nav">
-    <a href="{% url 'index' %}">Dashboard</a>
-    <a href="{% url 'roster' %}">Faculty Roster</a>
-    <a href="{% url 'import_survey' %}">Import Survey</a>
-    <a href="{% url 'departmental_data' %}">Departmental Data</a>
-    <a href="{% url 'reports_dashboard' %}" class="active">Reports</a>
-</div>
+{% block page_title %}Select Activities{% endblock %}
 
+{% block content %}
 <h1>Select Activity Types</h1>
 <p class="subtitle">Choose which activity types to include in the report</p>
 
@@ -41,7 +35,7 @@
     <div class="category-section">
         <div class="category-header">
             {{ category }}
-            <button type="button" onclick="selectCategory('{{ category }}')" style="float: right; background: transparent; border: 1px solid white; color: white; padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 12px;">Select All</button>
+            <button type="button" data-category="{{ category }}" onclick="selectCategory('{{ category }}', this)" style="float: right; background: transparent; border: 1px solid white; color: white; padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 12px;">Select All</button>
         </div>
         <div class="category-items">
             {% for act in activities %}
@@ -103,14 +97,33 @@ function deselectAll() {
     updateCount();
 }
 
-function selectCategory(category) {
-    document.querySelectorAll(`input[data-category="${category}"]`).forEach(cb => cb.checked = true);
+function selectCategory(category, btn) {
+    const checkboxes = document.querySelectorAll(`input[data-category="${category}"]`);
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+    if (allChecked) {
+        // Deselect all
+        checkboxes.forEach(cb => cb.checked = false);
+        btn.textContent = 'Select All';
+    } else {
+        // Select all
+        checkboxes.forEach(cb => cb.checked = true);
+        btn.textContent = 'Deselect All';
+    }
     updateCount();
 }
 
 function updateCount() {
     const count = document.querySelectorAll('input[name="activities"]:checked').length;
     document.getElementById('selection-count').textContent = count + ' selected';
+
+    // Update all category button labels
+    document.querySelectorAll('.category-header button').forEach(btn => {
+        const category = btn.getAttribute('data-category');
+        const checkboxes = document.querySelectorAll(`input[data-category="${category}"]`);
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        btn.textContent = allChecked ? 'Deselect All' : 'Select All';
+    });
 }
 </script>
 {% endblock %}

@@ -2,15 +2,9 @@
 
 {% block title %}Select Faculty - Reports{% endblock %}
 
-{% block content %}
-<div class="nav">
-    <a href="{% url 'index' %}">Dashboard</a>
-    <a href="{% url 'roster' %}">Faculty Roster</a>
-    <a href="{% url 'import_survey' %}">Import Survey</a>
-    <a href="{% url 'departmental_data' %}">Departmental Data</a>
-    <a href="{% url 'reports_dashboard' %}" class="active">Reports</a>
-</div>
+{% block page_title %}Select Faculty{% endblock %}
 
+{% block content %}
 <h1>Select Faculty for Export</h1>
 <p>Academic Year: <strong>AY {{ academic_year.year_code }}</strong></p>
 

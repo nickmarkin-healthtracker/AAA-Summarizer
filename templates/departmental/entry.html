@@ -2,61 +2,75 @@
 
 {% block title %}Departmental Data - Academic Achievement Summarizer{% endblock %}
 
-{% block content %}
+{% block page_title %}Departmental Data Entry{% endblock %}
+
+{% block extra_css %}
 <style>
-    .dept-table { font-size: 14px; }
-    .dept-table th { white-space: nowrap; text-align: center; }
-    .dept-table td { text-align: center; }
+    .dept-table { font-size: 14px; width: 100%; }
+    .dept-table th { white-space: nowrap; text-align: center; padding: 8px; }
+    .dept-table td { text-align: center; padding: 8px; }
     .dept-table td:first-child { text-align: left; }
     .dept-table input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
     .dept-table input[type="number"] { width: 60px; text-align: center; }
     .section-header { background: #34495e; color: white; }
     .points-cell { font-weight: bold; color: #27ae60; }
     .note { font-size: 11px; color: #666; display: block; }
+    .dept-badge {
+        background: #f39c12;
+        color: white;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: normal;
+        margin-left: 4px;
+        vertical-align: middle;
+    }
+    .points-legend {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 12px 15px;
+        margin-bottom: 20px;
+        font-size: 13px;
+    }
+    .points-legend strong { color: #2c3e50; }
+    .points-legend .divider { color: #ccc; margin: 0 8px; }
 </style>
+{% endblock %}
 
-<div class="nav">
-    <a href="{% url 'index' %}">Dashboard</a>
-    <a href="{% url 'roster' %}">Faculty Roster</a>
-    <a href="{% url 'import_survey' %}">Import Survey</a>
-    <a href="{% url 'departmental_data' %}" class="active">Departmental Data</a>
-    <a href="{% url 'reports_dashboard' %}">Reports</a>
-</div>
-
-<h1>Departmental Data Entry</h1>
-
-<div class="actions">
-    <form method="get" style="display: inline;">
-        <label>Academic Year:</label>
-        <select name="year" onchange="window.location.href='{% url 'departmental_data_year' '00-00' %}'.replace('00-00', this.value)">
-            {% for year in years %}
-            <option value="{{ year.year_code }}" {% if year.year_code == academic_year.year_code %}selected{% endif %}>
-                AY {{ year.year_code }}{% if year.is_current %} (Current){% endif %}
-            </option>
-            {% endfor %}
-        </select>
-    </form>
-</div>
-
-<p style="margin: 15px 0;">
-    <strong>Point Values:</strong>
-    New Innovations: {{ point_values.new_innovations|default:2000 }} |
-    MyTIP Winner: {{ point_values.mytip_winner|default:250 }} |
-    MyTIP Count: {{ point_values.mytip_per|default:25 }}/ea (max 20) |
-    Top 25%: {{ point_values.teaching_top_25|default:2500 }} |
-    65-25%: {{ point_values.teaching_65_25|default:1000 }} |
-    Teacher of Year: {{ point_values.teacher_of_year|default:7500 }} |
-    Hon. Mention: {{ point_values.honorable_mention|default:5000 }} |
-    CCC Member: {{ point_values.ccc_member|default:1000 }}
+{% block content %}
+<p style="color: #666; margin-bottom: 15px;">
+    These items are tracked by the department (not self-reported). Mark all applicable items for each faculty member.
+    <span class="dept-badge">DEPT</span> = Department-tracked activity
 </p>
+
+<div class="points-legend">
+    <strong>Point Values:</strong>
+    New Innovations: {{ point_values.new_innovations|default:2000 }}
+    <span class="divider">|</span>
+    MyTIP Winner: {{ point_values.mytip_winner|default:250 }}
+    <span class="divider">|</span>
+    MyTIP Count: {{ point_values.mytip_per|default:25 }}/ea (max 20)
+    <span class="divider">|</span>
+    Top 25%: {{ point_values.teaching_top_25|default:2500 }}
+    <span class="divider">|</span>
+    65-25%: {{ point_values.teaching_65_25|default:1000 }}
+    <span class="divider">|</span>
+    Teacher of Year: {{ point_values.teacher_of_year|default:7500 }}
+    <span class="divider">|</span>
+    Hon. Mention: {{ point_values.honorable_mention|default:5000 }}
+    <span class="divider">|</span>
+    CCC Member: {{ point_values.ccc_member|default:1000 }}
+</div>
 
 <table class="dept-table">
     <thead>
         <tr class="section-header">
             <th rowspan="2" style="text-align: left;">Faculty</th>
-            <th colspan="3">Evaluations</th>
-            <th colspan="4">Teaching Awards</th>
-            <th rowspan="2">CCC</th>
+            <th rowspan="2" style="white-space: nowrap;">AVC</th>
+            <th colspan="3">Evaluations <span class="dept-badge">DEPT</span></th>
+            <th colspan="4">Teaching Awards <span class="dept-badge">DEPT</span></th>
+            <th rowspan="2">CCC <span class="dept-badge">DEPT</span></th>
             <th rowspan="2">Dept Total</th>
         </tr>
         <tr>
@@ -74,6 +88,10 @@
         <tr data-email="{{ d.faculty.email }}">
             <td style="text-align: left;">
                 <a href="{% url 'faculty_detail' d.faculty.email %}">{{ d.faculty.display_name }}</a>
+            </td>
+            <td>
+                <input type="checkbox" class="dept-checkbox" data-field="is_avc_eligible"
+                       {% if d.faculty.is_avc_eligible %}checked{% endif %}>
             </td>
             <td>
                 <input type="checkbox" class="dept-checkbox" data-field="new_innovations"
@@ -111,7 +129,7 @@
         </tr>
         {% empty %}
         <tr>
-            <td colspan="10" style="text-align: center; color: #666;">
+            <td colspan="11" style="text-align: center; color: #666;">
                 No faculty data. <a href="{% url 'import_survey' %}">Import survey data</a> first.
             </td>
         </tr>
@@ -119,9 +137,6 @@
     </tbody>
 </table>
 
-<div style="margin-top: 20px;">
-    <a href="{% url 'reports_dashboard' %}" class="btn btn-success">Continue to Reports</a>
-</div>
 {% endblock %}
 
 {% block scripts %}

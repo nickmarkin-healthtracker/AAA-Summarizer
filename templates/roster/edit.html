@@ -2,15 +2,9 @@
 
 {% block title %}Edit {{ faculty.display_name }} - Academic Achievement Summarizer{% endblock %}
 
-{% block content %}
-<div class="nav">
-    <a href="{% url 'index' %}">Dashboard</a>
-    <a href="{% url 'roster' %}">Faculty Roster</a>
-    <a href="{% url 'import_survey' %}">Import Survey</a>
-    <a href="{% url 'departmental_data' %}">Departmental Data</a>
-    <a href="{% url 'reports_dashboard' %}">Reports</a>
-</div>
+{% block page_title %}Edit {{ faculty.display_name }}{% endblock %}
 
+{% block content %}
 <h1>Edit Faculty Member</h1>
 
 <div class="card">
@@ -54,7 +48,12 @@
 
         <div class="form-group">
             <label>Division</label>
-            <input type="text" name="division" value="{{ faculty.division }}">
+            <select name="division">
+                <option value="">-- Select --</option>
+                {% for value, label in division_choices %}
+                <option value="{{ value }}" {% if faculty.division == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
         </div>
 
         <div class="form-group">

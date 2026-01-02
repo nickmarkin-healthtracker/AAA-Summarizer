@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ subcategory_name }} - {{ category_name }} - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}{{ subcategory_name }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'activity_categories' %}?year={{ academic_year.year_code }}">Categories</a> &raquo;
+    <a href="{% url 'activity_types' category %}?year={{ academic_year.year_code }}">{{ category_name }}</a> &raquo;
+    {{ subcategory_name }}
+</p>
+
+<div class="actions" style="margin-bottom: 15px;">
+    <form method="get" style="display: inline;">
+        <label>Academic Year:</label>
+        <select name="year" onchange="this.form.submit()">
+            {% for year in years %}
+            <option value="{{ year.year_code }}" {% if year.year_code == academic_year.year_code %}selected{% endif %}>
+                AY {{ year.year_code }}{% if year.is_current %} (Current){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+    <a href="{% url 'activity_entries' category subcategory %}?year={{ academic_year.year_code }}" class="btn btn-secondary" style="margin-left: 15px;">
+        View All Entries ({{ total_entries }})
+    </a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Role/Type</th>
+            <th>Entries</th>
+            <th>Faculty</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for role in roles %}
+        <tr>
+            <td>{{ role.name }}</td>
+            <td>{{ role.entries }}</td>
+            <td>{{ role.faculty_count }}</td>
+            <td>
+                <a href="{% url 'activity_entries_by_role' category subcategory role.name %}?year={{ academic_year.year_code }}" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">
+                    View Entries
+                </a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="4" style="text-align: center; color: #666;">No activities found for this subcategory.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Activity for {{ faculty.display_name }} - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}Add Activity{% endblock %}
+
+{% block content %}
+<h1>Add Activity</h1>
+<p>For: <strong>{{ faculty.display_name }}</strong> | AY {{ academic_year.year_code }}</p>
+<p><a href="{% url 'faculty_activities' faculty.email %}?year={{ academic_year.year_code }}">Cancel</a></p>
+
+<h2>Select Activity Type</h2>
+
+{% for cat_key, cat_info in categories.items %}
+<div class="card" style="margin-bottom: 20px;">
+    <h3>{{ cat_info.name }}</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+        {% for subcat_key, subcat_name in cat_info.subcategories %}
+        <a href="{% url 'add_activity_form' faculty.email cat_key subcat_key %}?year={{ academic_year.year_code }}"
+           class="btn btn-secondary" style="padding: 8px 15px;">
+            {{ subcat_name }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

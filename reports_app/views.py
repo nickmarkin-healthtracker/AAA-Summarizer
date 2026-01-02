@@ -22,6 +22,9 @@ from .models import (
     SurveyImport,
     FacultySurveyData,
     DepartmentalData,
+    ActivityCategory,
+    ActivityGoal,
+    ActivityType,
 )
 
 
@@ -52,12 +55,66 @@ def make_faculty_filename(display_name, suffix="Summary"):
 
 
 def index(request):
-    """Home page - upload CSV file."""
+    """Home page - dashboard with data overview."""
     if request.method == 'GET' and 'clear' in request.GET:
         request.session.flush()
 
     has_data = 'faculty_data' in request.session
-    return render(request, 'index.html', {'has_data': has_data})
+
+    # Get selected academic year from context processor
+    academic_year = request.session.get('selected_academic_year')
+    if academic_year:
+        academic_year = AcademicYear.objects.filter(year_code=academic_year).first()
+    if not academic_year:
+        academic_year = AcademicYear.get_current()
+
+    # Gather statistics for the dashboard
+    stats = {
+        'total_faculty': FacultyMember.objects.filter(is_active=True).count(),
+        'avc_eligible_faculty': FacultyMember.objects.filter(is_active=True, is_avc_eligible=True).count(),
+        'faculty_with_data': 0,
+        'q1_q2': 0,
+        'q3': 0,
+        'q4': 0,
+        'total_activities': 0,
+        'activity_counts': {},
+    }
+
+    if academic_year:
+        survey_data = FacultySurveyData.objects.filter(academic_year=academic_year)
+        stats['faculty_with_data'] = survey_data.count()
+
+        # Count quarters and activities
+        for sd in survey_data:
+            # Count quarters
+            for q in sd.quarters_reported or []:
+                if 'Q1' in q or 'Q2' in q:
+                    stats['q1_q2'] += 1
+                elif 'Q3' in q:
+                    stats['q3'] += 1
+                elif 'Q4' in q:
+                    stats['q4'] += 1
+
+            # Count activities
+            activities = sd.activities_json or {}
+            for category, subcats in activities.items():
+                if category not in stats['activity_counts']:
+                    stats['activity_counts'][category] = 0
+                for subcat, entries in subcats.items():
+                    if isinstance(entries, list):
+                        count = len(entries)
+                    elif isinstance(entries, dict):
+                        count = 1
+                    else:
+                        count = 0
+                    stats['activity_counts'][category] += count
+                    stats['total_activities'] += count
+
+    return render(request, 'index.html', {
+        'has_data': has_data,
+        'stats': stats,
+        'academic_year': academic_year,
+    })
 
 
 @require_http_methods(["POST"])
@@ -331,6 +388,67 @@ def set_current_year(request):
     return redirect('year_list')
 
 
+def select_year(request):
+    """Select the academic year to view (stored in session)."""
+    year_code = request.GET.get('year') or request.POST.get('year_code')
+    if year_code:
+        try:
+            year = AcademicYear.objects.get(year_code=year_code)
+            request.session['selected_academic_year'] = year_code
+        except AcademicYear.DoesNotExist:
+            messages.error(request, 'Academic year not found.')
+
+    # Redirect back to referring page or home
+    referer = request.META.get('HTTP_REFERER', '/')
+    return redirect(referer)
+
+
+def create_year(request):
+    """Create a new academic year."""
+    from datetime import date
+
+    if request.method == 'POST':
+        year_code = request.POST.get('year_code', '').strip()
+
+        # Validate format (e.g., "24-25")
+        if not year_code or len(year_code) != 5 or year_code[2] != '-':
+            messages.error(request, 'Invalid year format. Use format like "24-25".')
+            return redirect('year_list')
+
+        try:
+            start_yy = int(year_code[:2])
+            end_yy = int(year_code[3:])
+
+            # Determine full years (assume 2000s)
+            start_year = 2000 + start_yy
+            end_year = 2000 + end_yy
+
+            # Validate sequence
+            if end_year != start_year + 1:
+                messages.error(request, 'End year must be one year after start year.')
+                return redirect('year_list')
+
+            # Create the year
+            year, created = AcademicYear.objects.get_or_create(
+                year_code=year_code,
+                defaults={
+                    'start_date': date(start_year, 7, 1),
+                    'end_date': date(end_year, 6, 30),
+                    'is_current': False,
+                }
+            )
+
+            if created:
+                messages.success(request, f'Created academic year {year}.')
+            else:
+                messages.info(request, f'Academic year {year} already exists.')
+
+        except ValueError:
+            messages.error(request, 'Invalid year format. Use format like "24-25".')
+
+    return redirect('year_list')
+
+
 # =============================================================================
 # FACULTY ROSTER MANAGEMENT
 # =============================================================================
@@ -342,26 +460,26 @@ def faculty_roster(request):
     # Filters
     division = request.GET.get('division', '')
     rank = request.GET.get('rank', '')
+    contract = request.GET.get('contract', '')
     ccc_only = request.GET.get('ccc', '') == '1'
 
     if division:
         faculty = faculty.filter(division=division)
     if rank:
         faculty = faculty.filter(rank=rank)
+    if contract:
+        faculty = faculty.filter(contract_type=contract)
     if ccc_only:
         faculty = faculty.filter(is_ccc_member=True)
 
-    # Get distinct values for filter dropdowns
-    divisions = FacultyMember.objects.filter(is_active=True).values_list(
-        'division', flat=True
-    ).distinct().order_by('division')
-
     return render(request, 'roster/list.html', {
         'faculty': faculty,
-        'divisions': [d for d in divisions if d],
+        'division_choices': FacultyMember.DIVISION_CHOICES,
         'rank_choices': FacultyMember.RANK_CHOICES,
+        'contract_choices': FacultyMember.CONTRACT_CHOICES,
         'current_division': division,
         'current_rank': rank,
+        'current_contract': contract,
         'ccc_only': ccc_only,
     })
 
@@ -402,26 +520,166 @@ def import_roster(request):
     return render(request, 'roster/import.html')
 
 
+def faculty_summary(request):
+    """
+    Faculty Summary view - high-level overview of all faculty points.
+
+    Shows all faculty with their domain points, total, and departmental indicators.
+    """
+    # Use selected academic year from session
+    selected_year_code = request.session.get('selected_academic_year')
+    if selected_year_code:
+        academic_year = AcademicYear.objects.filter(year_code=selected_year_code).first()
+    if not selected_year_code or not academic_year:
+        academic_year = AcademicYear.get_current()
+
+    # Get all active faculty
+    faculty_list = FacultyMember.objects.filter(is_active=True).order_by('last_name', 'first_name')
+
+    # Build summary data for each faculty
+    summary_data = []
+    for faculty in faculty_list:
+        # Get survey data
+        survey = FacultySurveyData.objects.filter(
+            faculty=faculty, academic_year=academic_year
+        ).first()
+
+        # Get departmental data
+        dept = DepartmentalData.objects.filter(
+            faculty=faculty, academic_year=academic_year
+        ).first()
+
+        # Calculate points
+        citizenship = survey.citizenship_points if survey else 0
+        education = survey.education_points if survey else 0
+        research = survey.research_points if survey else 0
+        leadership = survey.leadership_points if survey else 0
+        content_expert = survey.content_expert_points if survey else 0
+        survey_total = citizenship + education + research + leadership + content_expert
+
+        dept_total = dept.departmental_total_points if dept else 0
+        grand_total = survey_total + dept_total
+
+        # Check for departmental activities
+        has_dept_activities = False
+        if dept:
+            has_dept_activities = (
+                dept.new_innovations or
+                dept.mytip_winner or
+                dept.mytip_count > 0 or
+                dept.teaching_top_25 or
+                dept.teaching_65_25 or
+                dept.teacher_of_year or
+                dept.honorable_mention or
+                faculty.is_ccc_member
+            )
+
+        summary_data.append({
+            'faculty': faculty,
+            'citizenship': citizenship,
+            'education': education,
+            'research': research,
+            'leadership': leadership,
+            'content_expert': content_expert,
+            'survey_total': survey_total,
+            'dept_total': dept_total,
+            'grand_total': grand_total,
+            'has_dept_activities': has_dept_activities,
+            'has_survey_data': survey is not None,
+        })
+
+    # Calculate totals
+    total_faculty = len(summary_data)
+    faculty_with_data = sum(1 for s in summary_data if s['has_survey_data'])
+
+    return render(request, 'roster/summary.html', {
+        'summary_data': summary_data,
+        'academic_year': academic_year,
+        'total_faculty': total_faculty,
+        'faculty_with_data': faculty_with_data,
+    })
+
+
 def faculty_detail(request, email):
-    """View faculty member details."""
+    """View faculty member details with full activity breakdown."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES
+
     faculty = get_object_or_404(FacultyMember, email=email)
-    current_year = AcademicYear.get_current()
 
-    # Get survey data for current year
+    # Use selected academic year from session (set by context processor)
+    selected_year_code = request.session.get('selected_academic_year')
+    if selected_year_code:
+        academic_year = AcademicYear.objects.filter(year_code=selected_year_code).first()
+    if not selected_year_code or not academic_year:
+        academic_year = AcademicYear.get_current()
+
+    # Get survey data for selected year
     survey_data = FacultySurveyData.objects.filter(
-        faculty=faculty, academic_year=current_year
+        faculty=faculty, academic_year=academic_year
     ).first()
 
-    # Get departmental data for current year
+    # Get departmental data for selected year
     dept_data = DepartmentalData.objects.filter(
-        faculty=faculty, academic_year=current_year
+        faculty=faculty, academic_year=academic_year
     ).first()
+
+    # Get combined activities for display
+    # Structure: [{name, total, subcategories: {name: entries}}]
+    activity_sections = []
+    if survey_data:
+        combined = get_combined_activities(survey_data)
+        for cat_key, cat_info in ACTIVITY_CATEGORIES.items():
+            cat_name = cat_info['name']
+            cat_total = 0
+            subcategories = {}
+            if cat_key in combined:
+                for subcat, entries in combined[cat_key].items():
+                    if not entries:
+                        continue
+                    display_name = ACTIVITY_DISPLAY_NAMES.get(subcat, subcat)
+                    # Normalize entries to list format for template
+                    if isinstance(entries, list) and entries:
+                        subcategories[display_name] = entries
+                        # Sum points for this subcategory
+                        for entry in entries:
+                            cat_total += entry.get('points', 0)
+                    elif isinstance(entries, dict) and entries:
+                        # Single entry stored as dict - convert to list
+                        # Only include if it has meaningful data
+                        if entries.get('points') or entries.get('type') or entries.get('rotations'):
+                            subcategories[display_name] = [entries]
+                            cat_total += entries.get('points', 0)
+            if subcategories:
+                activity_sections.append({
+                    'name': cat_name,
+                    'total': cat_total,
+                    'subcategories': subcategories,
+                })
+
+    # Calculate totals
+    survey_total = 0
+    dept_total = 0
+    if survey_data:
+        survey_total = (
+            (survey_data.citizenship_points or 0) +
+            (survey_data.education_points or 0) +
+            (survey_data.research_points or 0) +
+            (survey_data.leadership_points or 0) +
+            (survey_data.content_expert_points or 0)
+        )
+    if dept_data:
+        dept_total = dept_data.departmental_total_points
+    grand_total = survey_total + dept_total
 
     return render(request, 'roster/detail.html', {
         'faculty': faculty,
-        'current_year': current_year,
+        'academic_year': academic_year,
         'survey_data': survey_data,
         'dept_data': dept_data,
+        'activity_sections': activity_sections,
+        'survey_total': survey_total,
+        'dept_total': dept_total,
+        'grand_total': grand_total,
     })
 
 
@@ -446,6 +704,7 @@ def faculty_edit(request, email):
         'faculty': faculty,
         'rank_choices': FacultyMember.RANK_CHOICES,
         'contract_choices': FacultyMember.CONTRACT_CHOICES,
+        'division_choices': FacultyMember.DIVISION_CHOICES,
     })
 
 
@@ -623,6 +882,17 @@ def import_confirm(request):
             faculty = roster_lookup.get(email.lower())
 
             if faculty:
+                # Check if record exists to preserve manual activities
+                existing = FacultySurveyData.objects.filter(
+                    faculty=faculty,
+                    academic_year=academic_year,
+                ).first()
+
+                # Preserve manual activities if they exist
+                manual_activities = {}
+                if existing and existing.manual_activities_json:
+                    manual_activities = existing.manual_activities_json
+
                 # Update or create survey data
                 survey_data, created = FacultySurveyData.objects.update_or_create(
                     faculty=faculty,
@@ -638,6 +908,7 @@ def import_confirm(request):
                         'content_expert_points': data.get('totals', {}).get('content_expert', 0),
                         'survey_total_points': data.get('totals', {}).get('total', 0),
                         'activities_json': data.get('activities', {}),
+                        'manual_activities_json': manual_activities,  # Preserve manual entries
                     }
                 )
                 matched_count += 1
@@ -667,7 +938,7 @@ def import_confirm(request):
     else:
         messages.success(request, f'Successfully imported {matched_count} faculty.')
 
-    return redirect('departmental_data')
+    return redirect('faculty_summary')
 
 
 def import_history(request):
@@ -738,6 +1009,10 @@ def departmental_update(request):
         if field == 'is_ccc_member':
             faculty.is_ccc_member = bool(value)
             faculty.save()
+        # Handle AVC eligibility (on FacultyMember model, persists across years)
+        elif field == 'is_avc_eligible':
+            faculty.is_avc_eligible = bool(value)
+            faculty.save()
         # Update departmental data fields
         elif field == 'mytip_count':
             value = min(int(value), 20)  # Enforce max
@@ -784,15 +1059,21 @@ def reports_dashboard(request):
 def db_export_points(request):
     """Export points summary from database."""
     year_code = request.GET.get('year', '')
+    filter_type = request.GET.get('filter', 'all')
+
     if year_code:
         academic_year = get_object_or_404(AcademicYear, year_code=year_code)
     else:
         academic_year = AcademicYear.get_current()
 
     # Get all faculty with data for this year
-    survey_data = FacultySurveyData.objects.filter(
+    survey_queryset = FacultySurveyData.objects.filter(
         academic_year=academic_year
     ).select_related('faculty')
+
+    # Filter by AVC eligibility if requested
+    if filter_type == 'avc_eligible':
+        survey_queryset = survey_queryset.filter(faculty__is_avc_eligible=True)
 
     dept_data = {
         d.faculty.email: d
@@ -800,23 +1081,25 @@ def db_export_points(request):
     }
 
     # Build CSV
-    lines = ['Name,Email,Survey Points,Departmental Points,CCC Points,Total Points']
+    lines = ['Name,Email,AVC Eligible,Survey Points,Departmental Points,CCC Points,Total Points']
 
-    for sd in survey_data.order_by('faculty__last_name', 'faculty__first_name'):
+    for sd in survey_queryset.order_by('faculty__last_name', 'faculty__first_name'):
         faculty = sd.faculty
         dd = dept_data.get(faculty.email)
         dept_points = dd.departmental_total_points if dd else 0
         ccc_points = DepartmentalData.POINT_VALUES['ccc_member'] if faculty.is_ccc_member else 0
         total = sd.survey_total_points + dept_points + ccc_points
+        avc_eligible = 'Yes' if faculty.is_avc_eligible else 'No'
 
         lines.append(
-            f'"{faculty.display_name}",{faculty.email},'
+            f'"{faculty.display_name}",{faculty.email},{avc_eligible},'
             f'{sd.survey_total_points},{dept_points},{ccc_points},{total}'
         )
 
     csv_content = '\n'.join(lines)
+    filename_suffix = '_avc_eligible' if filter_type == 'avc_eligible' else ''
     response = HttpResponse(csv_content, content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="points_summary_{academic_year.year_code}.csv"'
+    response['Content-Disposition'] = f'attachment; filename="points_summary_{academic_year.year_code}{filename_suffix}.csv"'
     return response
 
 
@@ -898,6 +1181,9 @@ def db_export_faculty(request):
                 ).first()
 
                 # Reconstruct data structure for report generator
+                # Combine imported + manual activities
+                combined_activities = get_combined_activities(sd)
+
                 faculty_data[email] = {
                     'email': email,
                     'display_name': sd.faculty.display_name,
@@ -913,7 +1199,7 @@ def db_export_faculty(request):
                         'leadership': sd.leadership_points,
                         'content_expert': sd.content_expert_points,
                     },
-                    'activities': sd.activities_json,
+                    'activities': combined_activities,
                     # Add departmental data
                     'departmental': {
                         'evaluations_points': dd.evaluations_points if dd else 0,
@@ -1009,21 +1295,34 @@ def db_select_activities(request):
     else:
         academic_year = AcademicYear.get_current()
 
-    # Build activity index from all FacultySurveyData records
+    # Build activity index from all FacultySurveyData records (including manual)
+    # Format: {"category.subcategory": [entries with faculty info]}
     activity_index = {}
-    survey_data = FacultySurveyData.objects.filter(academic_year=academic_year)
+    survey_data = FacultySurveyData.objects.filter(academic_year=academic_year).select_related('faculty')
 
     for sd in survey_data:
-        activities = sd.activities_json or {}
-        for activity_key, activity_list in activities.items():
-            if activity_key not in activity_index:
-                activity_index[activity_key] = []
-            # Add faculty info to each activity
-            for activity in activity_list:
-                activity_with_faculty = activity.copy()
-                activity_with_faculty['faculty_name'] = sd.faculty.display_name
-                activity_with_faculty['faculty_email'] = sd.faculty.email
-                activity_index[activity_key].append(activity_with_faculty)
+        # Use combined activities (imported + manual)
+        activities = get_combined_activities(sd)
+        # activities is {category: {subcategory: [entries]}}
+        for category, subcats in activities.items():
+            if not isinstance(subcats, dict):
+                continue
+            for subcategory, entries in subcats.items():
+                activity_key = f"{category}.{subcategory}"
+                if activity_key not in activity_index:
+                    activity_index[activity_key] = []
+                # Add faculty info to each activity
+                if isinstance(entries, list):
+                    for entry in entries:
+                        entry_with_faculty = entry.copy() if isinstance(entry, dict) else {'value': entry}
+                        entry_with_faculty['faculty_name'] = sd.faculty.display_name
+                        entry_with_faculty['faculty_email'] = sd.faculty.email
+                        activity_index[activity_key].append(entry_with_faculty)
+                elif isinstance(entries, dict) and entries:
+                    entry_with_faculty = entries.copy()
+                    entry_with_faculty['faculty_name'] = sd.faculty.display_name
+                    entry_with_faculty['faculty_email'] = sd.faculty.email
+                    activity_index[activity_key].append(entry_with_faculty)
 
     # Get activity types with data
     activity_types = parser.get_activity_types_with_data(activity_index)
@@ -1063,20 +1362,22 @@ def db_export_activities(request):
         return redirect('db_select_activities')
 
     try:
-        # Build activity index from database
+        # Build activity index from database (including manual)
         activity_index = {}
-        survey_data = FacultySurveyData.objects.filter(academic_year=academic_year)
+        survey_data = FacultySurveyData.objects.filter(academic_year=academic_year).select_related('faculty')
 
         for sd in survey_data:
-            activities = sd.activities_json or {}
+            # Use combined activities (imported + manual)
+            activities = get_combined_activities(sd)
             for activity_key, activity_list in activities.items():
                 if activity_key not in activity_index:
                     activity_index[activity_key] = []
-                for activity in activity_list:
-                    activity_with_faculty = activity.copy()
-                    activity_with_faculty['faculty_name'] = sd.faculty.display_name
-                    activity_with_faculty['faculty_email'] = sd.faculty.email
-                    activity_index[activity_key].append(activity_with_faculty)
+                if isinstance(activity_list, list):
+                    for activity in activity_list:
+                        activity_with_faculty = activity.copy()
+                        activity_with_faculty['faculty_name'] = sd.faculty.display_name
+                        activity_with_faculty['faculty_email'] = sd.faculty.email
+                        activity_index[activity_key].append(activity_with_faculty)
 
         # Generate combined activity report
         md_content = reports.generate_combined_activity_report(activity_index, selected_types, sort_by)
@@ -1101,3 +1402,867 @@ def db_export_activities(request):
     except Exception as e:
         messages.error(request, f'Error generating report: {str(e)}')
         return redirect('db_select_activities')
+
+
+# =============================================================================
+# ACTIVITY BROWSE & EDIT
+# =============================================================================
+
+def get_combined_activities(survey_data):
+    """Merge imported and manual activities for a faculty member."""
+    import copy
+    combined = copy.deepcopy(survey_data.activities_json or {})
+    manual = survey_data.manual_activities_json or {}
+
+    for category, subcats in manual.items():
+        if category not in combined:
+            combined[category] = {}
+        if isinstance(subcats, dict):
+            for subcat, entries in subcats.items():
+                if subcat not in combined[category]:
+                    combined[category][subcat] = []
+                if isinstance(entries, list):
+                    for entry in entries:
+                        entry_copy = entry.copy()
+                        entry_copy['source'] = 'manual'
+                        combined[category][subcat].append(entry_copy)
+
+    return combined
+
+
+def activity_category_list(request):
+    """Show all activity categories with counts."""
+    from src.config import ACTIVITY_CATEGORIES
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    # Get all survey data for this year
+    survey_data = FacultySurveyData.objects.filter(academic_year=academic_year)
+
+    # Count activities by category
+    category_counts = {}
+    for cat_key, cat_info in ACTIVITY_CATEGORIES.items():
+        category_counts[cat_key] = {
+            'name': cat_info['name'],
+            'imported': 0,
+            'manual': 0,
+            'subcategories': cat_info['subcategories'],
+        }
+
+    for sd in survey_data:
+        # Count imported activities
+        activities = sd.activities_json or {}
+        for cat_key in category_counts:
+            if cat_key in activities:
+                cat_data = activities[cat_key]
+                if isinstance(cat_data, dict):
+                    for subcat, entries in cat_data.items():
+                        if isinstance(entries, list):
+                            category_counts[cat_key]['imported'] += len(entries)
+                        elif entries:  # Single entry dict
+                            category_counts[cat_key]['imported'] += 1
+
+        # Count manual activities
+        manual = sd.manual_activities_json or {}
+        for cat_key in category_counts:
+            if cat_key in manual:
+                cat_data = manual[cat_key]
+                if isinstance(cat_data, dict):
+                    for subcat, entries in cat_data.items():
+                        if isinstance(entries, list):
+                            category_counts[cat_key]['manual'] += len(entries)
+
+    years = AcademicYear.objects.all()
+
+    return render(request, 'activities/category_list.html', {
+        'categories': category_counts,
+        'academic_year': academic_year,
+        'years': years,
+    })
+
+
+def activity_type_list(request, category):
+    """Show subcategories within a category."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES
+
+    if category not in ACTIVITY_CATEGORIES:
+        messages.error(request, f'Unknown category: {category}')
+        return redirect('activity_categories')
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    cat_info = ACTIVITY_CATEGORIES[category]
+    survey_data = FacultySurveyData.objects.filter(academic_year=academic_year)
+
+    # Count activities by subcategory
+    subcat_counts = {}
+    for subcat in cat_info['subcategories']:
+        subcat_counts[subcat] = {
+            'display_name': ACTIVITY_DISPLAY_NAMES.get(subcat, subcat),
+            'entries': 0,
+            'faculty_count': 0,
+            'faculty_set': set(),
+        }
+
+    for sd in survey_data:
+        # Count imported
+        activities = sd.activities_json or {}
+        if category in activities:
+            cat_data = activities[category]
+            if isinstance(cat_data, dict):
+                for subcat, entries in cat_data.items():
+                    if subcat in subcat_counts:
+                        if isinstance(entries, list):
+                            subcat_counts[subcat]['entries'] += len(entries)
+                            if entries:
+                                subcat_counts[subcat]['faculty_set'].add(sd.faculty.email)
+                        elif entries:
+                            subcat_counts[subcat]['entries'] += 1
+                            subcat_counts[subcat]['faculty_set'].add(sd.faculty.email)
+
+        # Count manual
+        manual = sd.manual_activities_json or {}
+        if category in manual:
+            cat_data = manual[category]
+            if isinstance(cat_data, dict):
+                for subcat, entries in cat_data.items():
+                    if subcat in subcat_counts and isinstance(entries, list):
+                        subcat_counts[subcat]['entries'] += len(entries)
+                        if entries:
+                            subcat_counts[subcat]['faculty_set'].add(sd.faculty.email)
+
+    # Convert faculty sets to counts
+    for subcat in subcat_counts:
+        subcat_counts[subcat]['faculty_count'] = len(subcat_counts[subcat]['faculty_set'])
+        del subcat_counts[subcat]['faculty_set']
+
+    years = AcademicYear.objects.all()
+
+    return render(request, 'activities/type_list.html', {
+        'category': category,
+        'category_name': cat_info['name'],
+        'subcategories': subcat_counts,
+        'academic_year': academic_year,
+        'years': years,
+    })
+
+
+def activity_role_list(request, category, subcategory):
+    """Show roles/types within a subcategory (e.g., Shadow, Visiting Professor)."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES
+
+    if category not in ACTIVITY_CATEGORIES:
+        messages.error(request, f'Unknown category: {category}')
+        return redirect('activity_categories')
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    cat_info = ACTIVITY_CATEGORIES[category]
+    survey_data = FacultySurveyData.objects.filter(academic_year=academic_year)
+
+    # Collect unique roles/types and count entries
+    role_counts = {}
+    for sd in survey_data:
+        # Check imported activities
+        activities = sd.activities_json or {}
+        if category in activities:
+            cat_data = activities[category]
+            if isinstance(cat_data, dict) and subcategory in cat_data:
+                subcat_data = cat_data[subcategory]
+                entries = subcat_data if isinstance(subcat_data, list) else [subcat_data] if subcat_data else []
+                for entry in entries:
+                    role = entry.get('type') or entry.get('internal_type') or 'Other'
+                    if role not in role_counts:
+                        role_counts[role] = {'entries': 0, 'faculty_set': set()}
+                    role_counts[role]['entries'] += 1
+                    role_counts[role]['faculty_set'].add(sd.faculty.email)
+
+        # Check manual activities
+        manual = sd.manual_activities_json or {}
+        if category in manual:
+            cat_data = manual[category]
+            if isinstance(cat_data, dict) and subcategory in cat_data:
+                subcat_data = cat_data[subcategory]
+                entries = subcat_data if isinstance(subcat_data, list) else [subcat_data] if subcat_data else []
+                for entry in entries:
+                    role = entry.get('type') or entry.get('internal_type') or 'Other'
+                    if role not in role_counts:
+                        role_counts[role] = {'entries': 0, 'faculty_set': set()}
+                    role_counts[role]['entries'] += 1
+                    role_counts[role]['faculty_set'].add(sd.faculty.email)
+
+    # Convert sets to counts
+    roles = []
+    for role_name, data in sorted(role_counts.items()):
+        roles.append({
+            'name': role_name,
+            'entries': data['entries'],
+            'faculty_count': len(data['faculty_set']),
+        })
+
+    years = AcademicYear.objects.all()
+    total_entries = sum(r['entries'] for r in roles)
+
+    return render(request, 'activities/role_list.html', {
+        'category': category,
+        'category_name': cat_info['name'],
+        'subcategory': subcategory,
+        'subcategory_name': ACTIVITY_DISPLAY_NAMES.get(subcategory, subcategory),
+        'roles': roles,
+        'total_entries': total_entries,
+        'academic_year': academic_year,
+        'years': years,
+    })
+
+
+def activity_entries(request, category, subcategory):
+    """Show all entries for an activity type."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES
+
+    if category not in ACTIVITY_CATEGORIES:
+        messages.error(request, f'Unknown category: {category}')
+        return redirect('activity_categories')
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    cat_info = ACTIVITY_CATEGORIES[category]
+    survey_data = FacultySurveyData.objects.filter(
+        academic_year=academic_year
+    ).select_related('faculty')
+
+    # Collect all entries
+    entries = []
+    for sd in survey_data:
+        # Imported entries
+        activities = sd.activities_json or {}
+        if category in activities:
+            cat_data = activities[category]
+            if isinstance(cat_data, dict) and subcategory in cat_data:
+                subcat_data = cat_data[subcategory]
+                if isinstance(subcat_data, list):
+                    for i, entry in enumerate(subcat_data):
+                        entries.append({
+                            'faculty_email': sd.faculty.email,
+                            'faculty_name': sd.faculty.display_name,
+                            'source': 'REDCap',
+                            'index': i,
+                            'data': entry,
+                        })
+                elif subcat_data:  # Single entry dict
+                    entries.append({
+                        'faculty_email': sd.faculty.email,
+                        'faculty_name': sd.faculty.display_name,
+                        'source': 'REDCap',
+                        'index': 0,
+                        'data': subcat_data,
+                    })
+
+        # Manual entries
+        manual = sd.manual_activities_json or {}
+        if category in manual:
+            cat_data = manual[category]
+            if isinstance(cat_data, dict) and subcategory in cat_data:
+                subcat_data = cat_data[subcategory]
+                if isinstance(subcat_data, list):
+                    for i, entry in enumerate(subcat_data):
+                        entries.append({
+                            'faculty_email': sd.faculty.email,
+                            'faculty_name': sd.faculty.display_name,
+                            'source': 'Manual',
+                            'index': i,
+                            'data': entry,
+                            'editable': True,
+                        })
+
+    # Sort by faculty name
+    entries.sort(key=lambda x: x['faculty_name'])
+
+    years = AcademicYear.objects.all()
+
+    return render(request, 'activities/entries.html', {
+        'category': category,
+        'category_name': cat_info['name'],
+        'subcategory': subcategory,
+        'subcategory_name': ACTIVITY_DISPLAY_NAMES.get(subcategory, subcategory),
+        'entries': entries,
+        'academic_year': academic_year,
+        'years': years,
+        'role_filter': None,
+    })
+
+
+def activity_entries_by_role(request, category, subcategory, role):
+    """Show entries filtered by a specific role/type."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES
+    from urllib.parse import unquote
+
+    role = unquote(role)  # URL decode the role name
+
+    if category not in ACTIVITY_CATEGORIES:
+        messages.error(request, f'Unknown category: {category}')
+        return redirect('activity_categories')
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    cat_info = ACTIVITY_CATEGORIES[category]
+    survey_data = FacultySurveyData.objects.filter(
+        academic_year=academic_year
+    ).select_related('faculty')
+
+    # Collect entries matching the role
+    entries = []
+    for sd in survey_data:
+        # Imported entries
+        activities = sd.activities_json or {}
+        if category in activities:
+            cat_data = activities[category]
+            if isinstance(cat_data, dict) and subcategory in cat_data:
+                subcat_data = cat_data[subcategory]
+                if isinstance(subcat_data, list):
+                    for i, entry in enumerate(subcat_data):
+                        entry_role = entry.get('type') or entry.get('internal_type') or 'Other'
+                        if entry_role == role:
+                            entries.append({
+                                'faculty_email': sd.faculty.email,
+                                'faculty_name': sd.faculty.display_name,
+                                'source': 'REDCap',
+                                'index': i,
+                                'data': entry,
+                            })
+                elif subcat_data:
+                    entry_role = subcat_data.get('type') or subcat_data.get('internal_type') or 'Other'
+                    if entry_role == role:
+                        entries.append({
+                            'faculty_email': sd.faculty.email,
+                            'faculty_name': sd.faculty.display_name,
+                            'source': 'REDCap',
+                            'index': 0,
+                            'data': subcat_data,
+                        })
+
+        # Manual entries
+        manual = sd.manual_activities_json or {}
+        if category in manual:
+            cat_data = manual[category]
+            if isinstance(cat_data, dict) and subcategory in cat_data:
+                subcat_data = cat_data[subcategory]
+                if isinstance(subcat_data, list):
+                    for i, entry in enumerate(subcat_data):
+                        entry_role = entry.get('type') or entry.get('internal_type') or 'Other'
+                        if entry_role == role:
+                            entries.append({
+                                'faculty_email': sd.faculty.email,
+                                'faculty_name': sd.faculty.display_name,
+                                'source': 'Manual',
+                                'index': i,
+                                'data': entry,
+                                'editable': True,
+                            })
+
+    # Sort by faculty name
+    entries.sort(key=lambda x: x['faculty_name'])
+
+    years = AcademicYear.objects.all()
+
+    return render(request, 'activities/entries.html', {
+        'category': category,
+        'category_name': cat_info['name'],
+        'subcategory': subcategory,
+        'subcategory_name': ACTIVITY_DISPLAY_NAMES.get(subcategory, subcategory),
+        'entries': entries,
+        'academic_year': academic_year,
+        'years': years,
+        'role_filter': role,
+    })
+
+
+def faculty_activities(request, email):
+    """Show all activities for a single faculty member."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES
+
+    faculty = get_object_or_404(FacultyMember, email=email)
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    survey_data = FacultySurveyData.objects.filter(
+        faculty=faculty,
+        academic_year=academic_year,
+    ).first()
+
+    # Build activity summary by category with edit metadata for manual entries
+    activity_summary = {}
+    if survey_data:
+        combined = get_combined_activities(survey_data)
+        manual = survey_data.manual_activities_json or {}
+
+        for cat_key, cat_info in ACTIVITY_CATEGORIES.items():
+            cat_name = cat_info['name']
+            if cat_key in combined:
+                activity_summary[cat_name] = {}
+                cat_data = combined[cat_key]
+                if isinstance(cat_data, dict):
+                    for subcat, entries in cat_data.items():
+                        subcat_name = ACTIVITY_DISPLAY_NAMES.get(subcat, subcat)
+                        if isinstance(entries, list) and entries:
+                            # Add metadata for manual entries
+                            enriched_entries = []
+                            manual_index = 0
+                            for entry in entries:
+                                entry_copy = entry.copy()
+                                if entry.get('source') == 'manual':
+                                    entry_copy['category'] = cat_key
+                                    entry_copy['subcategory'] = subcat
+                                    entry_copy['index'] = manual_index
+                                    manual_index += 1
+                                enriched_entries.append(entry_copy)
+                            activity_summary[cat_name][subcat_name] = enriched_entries
+                        elif entries and not isinstance(entries, list):
+                            activity_summary[cat_name][subcat_name] = [entries]
+
+    years = AcademicYear.objects.all()
+
+    return render(request, 'activities/faculty_activities.html', {
+        'faculty': faculty,
+        'survey_data': survey_data,
+        'activity_summary': activity_summary,
+        'academic_year': academic_year,
+        'years': years,
+    })
+
+
+def add_activity(request, email):
+    """Select activity type to add for a faculty member."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES
+
+    faculty = get_object_or_404(FacultyMember, email=email)
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    # Build category/subcategory choices
+    categories = {}
+    for cat_key, cat_info in ACTIVITY_CATEGORIES.items():
+        categories[cat_key] = {
+            'name': cat_info['name'],
+            'subcategories': [
+                (subcat, ACTIVITY_DISPLAY_NAMES.get(subcat, subcat))
+                for subcat in cat_info['subcategories']
+            ]
+        }
+
+    return render(request, 'activities/add.html', {
+        'faculty': faculty,
+        'categories': categories,
+        'academic_year': academic_year,
+    })
+
+
+def add_activity_form(request, email, category, subcategory):
+    """Form to add a specific activity type."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES, REPEATING_FIELD_PATTERNS
+
+    faculty = get_object_or_404(FacultyMember, email=email)
+
+    if category not in ACTIVITY_CATEGORIES:
+        messages.error(request, f'Unknown category: {category}')
+        return redirect('add_activity', email=email)
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    # Get field definitions for this activity type
+    fields = []
+    if subcategory in REPEATING_FIELD_PATTERNS:
+        pattern = REPEATING_FIELD_PATTERNS[subcategory]
+        for field_key, field_label in pattern['fields'].items():
+            if field_key != 'points':  # Points will be entered separately
+                fields.append({
+                    'key': field_key,
+                    'label': field_label.replace('#{n}', ''),
+                })
+
+    if request.method == 'POST':
+        # Get or create survey data
+        survey_data, created = FacultySurveyData.objects.get_or_create(
+            faculty=faculty,
+            academic_year=academic_year,
+            defaults={'quarters_reported': []}
+        )
+
+        # Build the activity entry
+        entry = {
+            'source': 'manual',
+            'added_at': datetime.now().isoformat(),
+        }
+        for field in fields:
+            entry[field['key']] = request.POST.get(field['key'], '')
+
+        points = request.POST.get('points', '')
+        try:
+            entry['points'] = int(points) if points else 0
+        except ValueError:
+            entry['points'] = 0
+
+        # Add to manual_activities_json
+        manual = survey_data.manual_activities_json or {}
+        if category not in manual:
+            manual[category] = {}
+        if subcategory not in manual[category]:
+            manual[category][subcategory] = []
+        manual[category][subcategory].append(entry)
+
+        survey_data.manual_activities_json = manual
+        survey_data.save()
+
+        messages.success(request, f'Activity added successfully.')
+        return redirect('faculty_activities', email=email)
+
+    return render(request, 'activities/add_form.html', {
+        'faculty': faculty,
+        'category': category,
+        'category_name': ACTIVITY_CATEGORIES[category]['name'],
+        'subcategory': subcategory,
+        'subcategory_name': ACTIVITY_DISPLAY_NAMES.get(subcategory, subcategory),
+        'fields': fields,
+        'academic_year': academic_year,
+    })
+
+
+def edit_activity(request, email, category, subcategory, index):
+    """Edit a manual activity."""
+    from src.config import ACTIVITY_CATEGORIES, ACTIVITY_DISPLAY_NAMES, REPEATING_FIELD_PATTERNS
+
+    faculty = get_object_or_404(FacultyMember, email=email)
+
+    if category not in ACTIVITY_CATEGORIES:
+        messages.error(request, f'Unknown category: {category}')
+        return redirect('activity_categories')
+
+    year_code = request.GET.get('year', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    survey_data = FacultySurveyData.objects.filter(
+        faculty=faculty,
+        academic_year=academic_year,
+    ).first()
+
+    if not survey_data:
+        messages.error(request, 'No survey data found for this faculty member.')
+        return redirect('faculty_activities', email=email)
+
+    # Get the manual activity entry
+    manual = survey_data.manual_activities_json or {}
+    if category not in manual or subcategory not in manual[category]:
+        messages.error(request, 'Activity not found.')
+        return redirect('faculty_activities', email=email)
+
+    entries = manual[category][subcategory]
+    if not isinstance(entries, list) or index >= len(entries):
+        messages.error(request, 'Activity not found.')
+        return redirect('faculty_activities', email=email)
+
+    entry = entries[index]
+
+    # Get field definitions
+    fields = []
+    if subcategory in REPEATING_FIELD_PATTERNS:
+        pattern = REPEATING_FIELD_PATTERNS[subcategory]
+        for field_key, field_label in pattern['fields'].items():
+            if field_key != 'points':
+                fields.append({
+                    'key': field_key,
+                    'label': field_label.replace('#{n}', ''),
+                    'value': entry.get(field_key, ''),
+                })
+
+    if request.method == 'POST':
+        # Update the entry
+        for field in fields:
+            entry[field['key']] = request.POST.get(field['key'], '')
+
+        points = request.POST.get('points', '')
+        try:
+            entry['points'] = int(points) if points else 0
+        except ValueError:
+            entry['points'] = 0
+
+        entry['edited_at'] = datetime.now().isoformat()
+
+        # Save back
+        manual[category][subcategory][index] = entry
+        survey_data.manual_activities_json = manual
+        survey_data.save()
+
+        messages.success(request, 'Activity updated successfully.')
+        return redirect('faculty_activities', email=email)
+
+    return render(request, 'activities/edit.html', {
+        'faculty': faculty,
+        'category': category,
+        'category_name': ACTIVITY_CATEGORIES[category]['name'],
+        'subcategory': subcategory,
+        'subcategory_name': ACTIVITY_DISPLAY_NAMES.get(subcategory, subcategory),
+        'fields': fields,
+        'entry': entry,
+        'index': index,
+        'academic_year': academic_year,
+    })
+
+
+@require_POST
+def delete_activity(request, email, category, subcategory, index):
+    """Delete a manual activity."""
+    from src.config import ACTIVITY_CATEGORIES
+
+    faculty = get_object_or_404(FacultyMember, email=email)
+
+    if category not in ACTIVITY_CATEGORIES:
+        messages.error(request, f'Unknown category: {category}')
+        return redirect('activity_categories')
+
+    year_code = request.POST.get('year_code', '')
+    if year_code:
+        academic_year = get_object_or_404(AcademicYear, year_code=year_code)
+    else:
+        academic_year = AcademicYear.get_current()
+
+    survey_data = FacultySurveyData.objects.filter(
+        faculty=faculty,
+        academic_year=academic_year,
+    ).first()
+
+    if not survey_data:
+        messages.error(request, 'No survey data found.')
+        return redirect('faculty_activities', email=email)
+
+    # Get and modify manual activities
+    manual = survey_data.manual_activities_json or {}
+    if category not in manual or subcategory not in manual[category]:
+        messages.error(request, 'Activity not found.')
+        return redirect('faculty_activities', email=email)
+
+    entries = manual[category][subcategory]
+    if not isinstance(entries, list) or index >= len(entries):
+        messages.error(request, 'Activity not found.')
+        return redirect('faculty_activities', email=email)
+
+    # Remove the entry
+    del manual[category][subcategory][index]
+
+    # Clean up empty subcategories/categories
+    if not manual[category][subcategory]:
+        del manual[category][subcategory]
+    if not manual[category]:
+        del manual[category]
+
+    survey_data.manual_activities_json = manual
+    survey_data.save()
+
+    messages.success(request, 'Activity deleted successfully.')
+    return redirect('faculty_activities', email=email)
+
+
+# =============================================================================
+# ACTIVITY POINTS CONFIGURATION
+# =============================================================================
+
+def activity_points_config(request):
+    """Display all activity types organized by category and goal with point values."""
+    categories = ActivityCategory.objects.prefetch_related(
+        'goals__activity_types'
+    ).filter(is_active=True)
+
+    # Build structured data for template
+    config_data = []
+    for category in categories:
+        cat_data = {
+            'category': category,
+            'goals': [],
+            'total_types': 0,
+        }
+        for goal in category.goals.filter(is_active=True):
+            activity_types = goal.activity_types.filter(is_active=True)
+            if activity_types.exists():
+                cat_data['goals'].append({
+                    'goal': goal,
+                    'activity_types': activity_types,
+                })
+                cat_data['total_types'] += activity_types.count()
+        config_data.append(cat_data)
+
+    return render(request, 'config/activity_points.html', {
+        'config_data': config_data,
+        'total_activities': ActivityType.objects.filter(is_active=True).count(),
+    })
+
+
+def activity_type_edit(request, pk):
+    """Edit an activity type's point value and settings."""
+    activity_type = get_object_or_404(ActivityType, pk=pk)
+
+    if request.method == 'POST':
+        # Update fields
+        activity_type.display_name = request.POST.get('display_name', activity_type.display_name)
+        activity_type.base_points = int(request.POST.get('base_points', activity_type.base_points))
+        activity_type.modifier_type = request.POST.get('modifier_type', activity_type.modifier_type)
+
+        max_count = request.POST.get('max_count', '')
+        activity_type.max_count = int(max_count) if max_count else None
+
+        max_points = request.POST.get('max_points', '')
+        activity_type.max_points = int(max_points) if max_points else None
+
+        activity_type.notes = request.POST.get('notes', '')
+        activity_type.is_active = request.POST.get('is_active') == 'on'
+
+        activity_type.save()
+
+        messages.success(request, f'Updated {activity_type.display_name}')
+        return redirect('activity_points_config')
+
+    return render(request, 'config/activity_type_edit.html', {
+        'activity_type': activity_type,
+        'modifier_choices': ActivityType.MODIFIER_CHOICES,
+    })
+
+
+def activity_type_create(request):
+    """Create a new activity type."""
+    categories = ActivityCategory.objects.filter(is_active=True).prefetch_related('goals')
+    goals = ActivityGoal.objects.filter(is_active=True).select_related('category')
+
+    if request.method == 'POST':
+        goal_id = request.POST.get('goal')
+        goal = get_object_or_404(ActivityGoal, pk=goal_id)
+
+        data_variable = request.POST.get('data_variable', '').strip()
+
+        # Check for duplicate data_variable
+        if ActivityType.objects.filter(data_variable=data_variable).exists():
+            messages.error(request, f'Data variable "{data_variable}" already exists.')
+            return render(request, 'config/activity_type_create.html', {
+                'categories': categories,
+                'goals': goals,
+                'modifier_choices': ActivityType.MODIFIER_CHOICES,
+                'form_data': request.POST,
+            })
+
+        max_count = request.POST.get('max_count', '')
+        max_points = request.POST.get('max_points', '')
+
+        activity_type = ActivityType.objects.create(
+            goal=goal,
+            name=request.POST.get('name', '').strip(),
+            display_name=request.POST.get('display_name', '').strip(),
+            data_variable=data_variable,
+            base_points=int(request.POST.get('base_points', 0)),
+            modifier_type=request.POST.get('modifier_type', 'fixed'),
+            max_count=int(max_count) if max_count else None,
+            max_points=int(max_points) if max_points else None,
+            notes=request.POST.get('notes', ''),
+            is_departmental=request.POST.get('is_departmental') == 'on',
+            is_active=True,
+        )
+
+        messages.success(request, f'Created activity type: {activity_type.display_name}')
+        return redirect('activity_points_config')
+
+    return render(request, 'config/activity_type_create.html', {
+        'categories': categories,
+        'goals': goals,
+        'modifier_choices': ActivityType.MODIFIER_CHOICES,
+    })
+
+
+def verify_impact_factors(request):
+    """
+    Verify self-reported impact factors against OpenAlex data.
+
+    Looks up DOIs via CrossRef, gets journal metrics from OpenAlex,
+    and flags publications where the difference is >= 2.
+    """
+    from .doi_lookup import verify_all_publications
+
+    # Get verification results
+    results = verify_all_publications()
+
+    # Process results for display
+    publications = []
+    flagged_count = 0
+    total_count = len(results)
+    successful_lookups = 0
+
+    for r in results:
+        if r.get('lookup_success'):
+            successful_lookups += 1
+
+        openalex_if = r.get('openalex_citedness')
+        reported_if = r.get('reported_if', 0)
+
+        # Calculate difference
+        if openalex_if is not None:
+            difference = reported_if - openalex_if
+            flagged = abs(difference) >= 2
+            if flagged:
+                flagged_count += 1
+        else:
+            difference = None
+            flagged = False
+
+        publications.append({
+            'faculty_name': r.get('faculty_name', ''),
+            'faculty_email': r.get('faculty_email', ''),
+            'journal_reported': r.get('journal_reported', ''),
+            'journal_crossref': r.get('journal_name', ''),
+            'title': r.get('pub_title_reported', ''),
+            'doi': r.get('doi', ''),
+            'reported_if': reported_if,
+            'openalex_if': round(openalex_if, 2) if openalex_if else None,
+            'difference': round(difference, 2) if difference is not None else None,
+            'flagged': flagged,
+            'points': r.get('points', 0),
+            'lookup_success': r.get('lookup_success', False),
+        })
+
+    # Sort flagged first, then by difference magnitude
+    publications.sort(key=lambda x: (not x['flagged'], -(abs(x['difference']) if x['difference'] else 0)))
+
+    return render(request, 'reports/verify_if.html', {
+        'publications': publications,
+        'total_count': total_count,
+        'successful_lookups': successful_lookups,
+        'flagged_count': flagged_count,
+    })

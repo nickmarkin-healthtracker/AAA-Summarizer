@@ -1,0 +1,238 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Activity Type - Academic Achievement Summarizer{% endblock %}
+
+{% block page_title %}Create Activity Type{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        max-width: 700px;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 25px;
+    }
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+        color: #2c3e50;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    .form-group textarea {
+        min-height: 80px;
+    }
+    .form-group small {
+        display: block;
+        margin-top: 5px;
+        color: #666;
+        font-size: 12px;
+    }
+    .form-row {
+        display: flex;
+        gap: 20px;
+    }
+    .form-row .form-group {
+        flex: 1;
+    }
+    .btn-primary {
+        background: #3498db;
+        color: white;
+        padding: 10px 25px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .btn-primary:hover {
+        background: #2980b9;
+    }
+    .btn-cancel {
+        background: #6c757d;
+        color: white;
+        padding: 10px 25px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        text-decoration: none;
+        margin-left: 10px;
+    }
+    .btn-cancel:hover {
+        background: #5a6268;
+        color: white;
+    }
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .checkbox-group input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+    }
+    .section-divider {
+        border-top: 1px solid #eee;
+        margin: 25px 0;
+        padding-top: 20px;
+    }
+    .section-title {
+        font-weight: 600;
+        color: #34495e;
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="section-title">Activity Placement</div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="category">Category</label>
+                <select id="category" name="category_select" required>
+                    <option value="">-- Select Category --</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk }}" {% if form_data.category_select == cat.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ cat.display_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="goal">Goal / Subcategory</label>
+                <select id="goal" name="goal" required>
+                    <option value="">-- Select Goal --</option>
+                    {% for goal in goals %}
+                    <option value="{{ goal.pk }}" data-category="{{ goal.category.pk }}" {% if form_data.goal == goal.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ goal.display_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small>Goals are filtered by category selection</small>
+            </div>
+        </div>
+
+        <div class="section-divider"></div>
+        <div class="section-title">Activity Details</div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="name">Internal Name</label>
+                <input type="text" id="name" name="name" value="{{ form_data.name|default:'' }}" required
+                       placeholder="e.g., committee_intramural">
+                <small>Short identifier (used in code)</small>
+            </div>
+            <div class="form-group">
+                <label for="display_name">Display Name</label>
+                <input type="text" id="display_name" name="display_name" value="{{ form_data.display_name|default:'' }}" required
+                       placeholder="e.g., Intramural Committees">
+                <small>Name shown to users</small>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="data_variable">Data Variable (REDCap field)</label>
+            <input type="text" id="data_variable" name="data_variable" value="{{ form_data.data_variable|default:'' }}" required
+                   placeholder="e.g., COMM_INTRAMURAL">
+            <small>Maps to the REDCap survey field name (must be unique)</small>
+        </div>
+
+        <div class="section-divider"></div>
+        <div class="section-title">Point Configuration</div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="base_points">Base Points</label>
+                <input type="number" id="base_points" name="base_points" value="{{ form_data.base_points|default:0 }}" required min="0">
+            </div>
+            <div class="form-group">
+                <label for="modifier_type">Modifier Type</label>
+                <select id="modifier_type" name="modifier_type">
+                    {% for value, label in modifier_choices %}
+                    <option value="{{ value }}" {% if form_data.modifier_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <small>How points are calculated</small>
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="max_count">Max Count (optional)</label>
+                <input type="number" id="max_count" name="max_count" value="{{ form_data.max_count|default:'' }}" min="0">
+                <small>Limit on number of items counted</small>
+            </div>
+            <div class="form-group">
+                <label for="max_points">Max Points (optional)</label>
+                <input type="number" id="max_points" name="max_points" value="{{ form_data.max_points|default:'' }}" min="0">
+                <small>Maximum points cap</small>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="notes">Notes (optional)</label>
+            <textarea id="notes" name="notes" placeholder="Any additional notes about this activity type...">{{ form_data.notes|default:'' }}</textarea>
+        </div>
+
+        <div class="form-group checkbox-group">
+            <input type="checkbox" id="is_departmental" name="is_departmental" {% if form_data.is_departmental %}checked{% endif %}>
+            <label for="is_departmental" style="margin-bottom: 0;">Department-tracked activity</label>
+            <small style="margin-left: 10px;">(Not from survey, tracked by dept)</small>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <button type="submit" class="btn-primary">Create Activity Type</button>
+        <a href="{% url 'activity_points_config' %}" class="btn-cancel">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Filter goals based on category selection
+document.getElementById('category').addEventListener('change', function() {
+    const categoryId = this.value;
+    const goalSelect = document.getElementById('goal');
+    const goals = goalSelect.querySelectorAll('option');
+
+    goals.forEach(option => {
+        if (option.value === '') {
+            option.style.display = '';
+        } else if (option.dataset.category === categoryId) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+
+    // Reset goal selection if current selection is hidden
+    if (goalSelect.selectedOptions[0].style.display === 'none') {
+        goalSelect.value = '';
+    }
+});
+
+// Trigger filter on page load if category is pre-selected
+if (document.getElementById('category').value) {
+    document.getElementById('category').dispatchEvent(new Event('change'));
+}
+</script>
+{% endblock %}
