@@ -1363,21 +1363,33 @@ def db_export_activities(request):
 
     try:
         # Build activity index from database (including manual)
+        # Format needed: {"category.subcategory": [entries with faculty info]}
         activity_index = {}
         survey_data = FacultySurveyData.objects.filter(academic_year=academic_year).select_related('faculty')
 
         for sd in survey_data:
             # Use combined activities (imported + manual)
+            # Structure is {category: {subcategory: [entries]}}
             activities = get_combined_activities(sd)
-            for activity_key, activity_list in activities.items():
-                if activity_key not in activity_index:
-                    activity_index[activity_key] = []
-                if isinstance(activity_list, list):
-                    for activity in activity_list:
-                        activity_with_faculty = activity.copy()
-                        activity_with_faculty['faculty_name'] = sd.faculty.display_name
-                        activity_with_faculty['faculty_email'] = sd.faculty.email
-                        activity_index[activity_key].append(activity_with_faculty)
+            for category, subcats in activities.items():
+                if not isinstance(subcats, dict):
+                    continue
+                for subcategory, entries in subcats.items():
+                    activity_key = f"{category}.{subcategory}"
+                    if activity_key not in activity_index:
+                        activity_index[activity_key] = []
+                    if isinstance(entries, list):
+                        for entry in entries:
+                            entry_with_faculty = entry.copy() if isinstance(entry, dict) else {'value': entry}
+                            # Use 'display_name' - this is what reports.py expects
+                            entry_with_faculty['display_name'] = sd.faculty.display_name
+                            entry_with_faculty['email'] = sd.faculty.email
+                            activity_index[activity_key].append(entry_with_faculty)
+                    elif isinstance(entries, dict) and entries:
+                        entry_with_faculty = entries.copy()
+                        entry_with_faculty['display_name'] = sd.faculty.display_name
+                        entry_with_faculty['email'] = sd.faculty.email
+                        activity_index[activity_key].append(entry_with_faculty)
 
         # Generate combined activity report
         md_content = reports.generate_combined_activity_report(activity_index, selected_types, sort_by)
